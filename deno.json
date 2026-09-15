@@ -1,8 +1,9 @@
 {
 	"name": "@yrrrrrf/dv",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Commands, composed. A Deno CLI and TypeScript library for discovery, heterogeneous command matrices, preparation, execution, and grouped terminal reporting.",
 	"author": "Fernando Bryan Reza Campos <fer.rezac@outlook.com>",
+	"readme": "README.md",
 	"license": "MIT",
 	"exports": { ".": "./src/mod.ts", "./cli": "./src/cli/mod.ts" },
 	"tasks": {
