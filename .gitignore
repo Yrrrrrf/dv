@@ -1,0 +1,16 @@
+# all that start with a dot except .gitignore, .fallow-baseline.json, and .fallowrc.json
+.*
+!.gitignore
+
+# lock files (from various package managers)
+*.lock
+
+# generated files
+node_modules
+build
+
+# ide configuration files 
+**.code-workspace
+
+# one * means any characters except /
+# two ** means any characters including /
