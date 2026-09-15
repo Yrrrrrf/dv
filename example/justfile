@@ -1,0 +1,166 @@
+# Independent Just + Nushell workflow. This never invokes pipeline.ts.
+# Deno runs the same src/mod.ts entrypoint exported by jsr:@yrrrrrf/dv.
+set unstable
+set shell := ["nu", "-c"]
+set script-interpreter := ["nu"]
+set quiet
+
+CLI := "deno run -A ../src/mod.ts"
+export DV_JUSTFILE := justfile()
+
+[default]
+[group('meta')]
+[doc('List the demo recipes')]
+list:
+    ^{{ CLI }} list --justfile $env.DV_JUSTFILE
+
+[group('meta')]
+[doc('Choose a recipe and app target')]
+menu:
+    ^{{ CLI }} menu --justfile $env.DV_JUSTFILE --complete run 'apps/*' --complete test 'apps/*' --complete preview 'apps/*'
+
+[group('dev')]
+[doc('Select and run an app')]
+[script]
+[positional-arguments]
+run *args:
+    def --wrapped main [...args: string] {
+        ^{{ CLI }} exec ...$args --title RUN --select one --cwd 'apps/*' -- deno run --allow-net=127.0.0.1 mod.ts
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('dev')]
+[doc('Remove demo build and coverage output')]
+[script]
+[positional-arguments]
+prune *args:
+    def --wrapped main [...args: string] {
+        ^{{ CLI }} rm ...$args --paths '["build","coverage"]'
+        exit $env.LAST_EXIT_CODE
+    }
+
+# Compose recipes through Nushell argv spreads: values containing spaces survive.
+# Each dependency explicitly checks status before continuing to the next gate.
+[group('dev')]
+[doc('Prune, then install dependencies')]
+[script]
+[positional-arguments]
+prepare *args:
+    def --wrapped main [...args: string] {
+        ^just --justfile $env.DV_JUSTFILE prune ...$args
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        ^{{ CLI }} exec ...$args --title PREPARE -- deno install
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('test')]
+[doc('Test all apps or one selected target')]
+[script]
+[positional-arguments]
+test *args:
+    def --wrapped main [...args: string] {
+        let rules = [{packages: 'apps/*', pattern: 'apps/*/mod_test.ts', engine: 'deno test', command: [deno test '{file}']}]
+        ^{{ CLI }} matrix ...$args --title TEST --commands none --rules ($rules | to json --raw)
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('test')]
+[doc('Collect app coverage')]
+[script]
+[positional-arguments]
+coverage *args:
+    def --wrapped main [...args: string] {
+        ^{{ CLI }} exec ...$args --title COVERAGE -- deno test --coverage=coverage apps
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('check')]
+[doc('Verify formatting')]
+[script]
+[positional-arguments]
+fmt *args:
+    def --wrapped main [...args: string] {
+        ^{{ CLI }} exec ...$args --title FMT -- deno fmt --check apps
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('check')]
+[doc('Lint app sources')]
+[script]
+[positional-arguments]
+lint *args:
+    def --wrapped main [...args: string] {
+        ^{{ CLI }} exec ...$args --title LINT -- deno lint apps
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('check')]
+[doc('Check all app entrypoints, with package rows even from the workspace root')]
+[script]
+[positional-arguments]
+types *args:
+    def --wrapped main [...args: string] {
+        let rules = [{packages: 'apps/*', pattern: 'apps/*/mod.ts', engine: 'deno check', cwd: '{root}', command: [deno check '{file}']}]
+        ^{{ CLI }} matrix ...$args --title TYPES --commands none --scope declared --rules ($rules | to json --raw)
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('check')]
+[doc('Format, lint, then check types')]
+[script]
+[positional-arguments]
+check *args:
+    def --wrapped main [...args: string] {
+        for recipe in [fmt lint types] {
+            ^just --justfile $env.DV_JUSTFILE $recipe ...$args
+            if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        }
+    }
+
+[group('ci')]
+[doc('Tests first, then checks')]
+[script]
+[positional-arguments]
+ci *args:
+    def --wrapped main [...args: string] {
+        for recipe in [test check] {
+            ^just --justfile $env.DV_JUSTFILE $recipe ...$args
+            if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        }
+    }
+
+[group('deploy')]
+[doc('Run CI, then stage app artifacts')]
+[script]
+[positional-arguments]
+build *args:
+    def --wrapped main [...args: string] {
+        ^just --justfile $env.DV_JUSTFILE ci ...$args
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        ^{{ CLI }} exec ...$args --title BUILD --engine deno --label 'Stage {name} artifacts' --select all --cwd 'apps/*' -- deno eval 'Deno.mkdirSync(Deno.args[0], { recursive: true }); Deno.copyFileSync("mod.ts", Deno.args[0] + "/mod.ts"); console.log("Built " + Deno.args[0]);' '{root}/build/{name}'
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('deploy')]
+[doc('Build first, then serve the selected artifact')]
+[script]
+[positional-arguments]
+preview *args:
+    def --wrapped main [...args: string] {
+        ^just --justfile $env.DV_JUSTFILE build ...$args
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        ^{{ CLI }} exec ...$args --title PREVIEW --select one --cwd 'apps/*' -- deno run --allow-net=127.0.0.1 '{root}/build/{name}/mod.ts'
+        exit $env.LAST_EXIT_CODE
+    }
+
+[group('deploy')]
+[doc('Prepare, then perform the gated build')]
+[script]
+[positional-arguments]
+cycle *args:
+    def --wrapped main [...args: string] {
+        for recipe in [prepare build] {
+            ^just --justfile $env.DV_JUSTFILE $recipe ...$args
+            if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        }
+    }
