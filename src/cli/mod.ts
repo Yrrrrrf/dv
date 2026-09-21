@@ -49,6 +49,8 @@ Execution:
   -j, --jobs N             Enable concurrency with a maximum of N children
   -v, --verbose            Show captured tool logs; grouped unless --logs stream
   -b, --benchmark          Include aggregate child time; ordinary timings always shown
+  -r, --raw                Direct interactive execution with inherited stdio and clean Ctrl-C
+  --no-raw                 Disable raw execution even when --select one is active
   --files patterns...      Expand a standalone {files} token into file arguments
   --env KEY=value          Repeatable child environment override
   --parser name            auto, raw, svelte-check, typescript, deno-test, deno-fmt, deno-lint, vitest, biome, fallow, vite

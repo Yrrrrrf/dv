@@ -132,6 +132,7 @@ export interface ExecOptions {
   stdin?: "null" | "inherit";
   interactive?: boolean;
   shell?: "sh" | "nu" | "powershell";
+  raw?: boolean;
 }
 /** A command vector plus its own discovery and execution options. */
 export interface ExecSpec extends

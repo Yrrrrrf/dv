@@ -22,6 +22,13 @@ Deno.test("CLI separates its vector flags from untouched child arguments", () =>
   equal(parsed.options.parallel, true);
   equal(parsed.command, ["tool", "--cwd", "unmodified", ""]);
 });
+Deno.test("CLI parses raw flags correctly", () => {
+  equal(parseArgs(["-r", "--", "echo"]).options.raw, true);
+  equal(parseArgs(["--raw", "--", "echo"]).options.raw, true);
+  equal(parseArgs(["--no-raw", "--", "echo"]).options.raw, false);
+  equal(parseArgs(["-rb", "--", "echo"]).options.raw, true);
+  equal(parseArgs(["-rb", "--", "echo"]).options.benchmark, true);
+});
 Deno.test("CLI rejects unknown options and invalid concurrency", async () => {
   await rejects(() => parseArgs(["--bogus"]), /Unknown/);
   await rejects(() => parseArgs(["--jobs", "0"]), /positive/);

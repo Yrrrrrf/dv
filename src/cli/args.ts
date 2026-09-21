@@ -26,7 +26,7 @@ export function parseArgs(input: readonly string[]): ParsedArguments {
   > = {};
   for (let i = 0; i < args.length; i++) {
     let arg = args[i]!;
-    if (/^-[Apvb]+$/.test(arg) && arg.length > 2) {
+    if (/^-[Apvbr]+$/.test(arg) && arg.length > 2) {
       args.splice(i, 1, ...arg.slice(1).split("").map((v) => "-" + v));
       arg = args[i]!;
     }
@@ -181,6 +181,8 @@ export function parseArgs(input: readonly string[]): ParsedArguments {
     else if (arg === "-p" || arg === "--parallel") options.parallel = true;
     else if (arg === "-v" || arg === "--verbose") options.verbose = true;
     else if (arg === "-b" || arg === "--benchmark") options.benchmark = true;
+    else if (arg === "-r" || arg === "--raw") options.raw = true;
+    else if (arg === "--no-raw") options.raw = false;
     else if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--fail-fast") options.failFast = true;
     else if (arg === "--quiet") options.quiet = true;
@@ -213,6 +215,8 @@ export function parseArgs(input: readonly string[]): ParsedArguments {
         "--json",
         "--help",
         "--no-interactive",
+        "--raw",
+        "--no-raw",
       ].includes(arg)
     ) throw new Error(`${arg} does not take a value`);
   }

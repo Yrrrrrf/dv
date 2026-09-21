@@ -84,6 +84,10 @@ metrics remain absent. A silent successful check displays `✓ success`.
   manifest.
 - `--shell sh|nu|powershell`: affects full command display only, never
   execution.
+- `-r, --raw`: direct interactive execution with inherited stdio, full TTY
+  interactivity, no test-suite framing, and clean Ctrl-C shutdown (default for
+  `--select one`).
+- `--no-raw`: disable raw execution even when `--select one` is active.
 - `--quiet`: silence the built-in reporter.
 - `--json`: machine-readable results, no built-in terminal output or selection
   prompt.
@@ -99,6 +103,27 @@ The live view refreshes at most every 100ms between events. It restores the
 cursor on normal completion, cancellation, and errors, and falls back to static
 output when the terminal becomes too small. Width handling covers common wide
 characters; complex joined emoji may still vary across terminal implementations.
+
+## Interactive execution (Dev and preview servers)
+
+For persistent, interactive servers like `run` (`vite dev`, `deno run`) or
+`preview` (`vite preview`):
+
+- **Default for `--select one`**: Targeting a single application via
+  `--select one` automatically enters **raw mode**. Target selection
+  (interactive menu or positional argument) runs first, and stdio is handed
+  directly to the selected child.
+- **Direct TTY & input**: Standard input, output, and error streams are
+  inherited (`inherit`), enabling internal keyboard shortcuts (e.g. Vite's `h`,
+  `r`, `q`), native terminal colors, and cursor manipulation.
+- **No test-suite framing**: Diagnostic banners (`◆ TITLE`), duration timers,
+  and live spinners are silenced so the server's output is unhindered.
+- **Clean `Ctrl-C` shutdown**: Stopping the interactive server via `Ctrl-C`
+  (SIGINT / exit code 130) is treated as normal completion (`code: 0`,
+  `success: true`), avoiding red failure boxes or recipe failures. Real server
+  crashes (exit code 1) continue to propagate their error exit codes.
+- **Explicit override**: Pass `-r` or `--raw` to force raw mode on any
+  execution, or `--no-raw` to retain the dashboard format with `--select one`.
 
 ## Commands and API
 

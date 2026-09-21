@@ -162,8 +162,16 @@ export function linkifyDiagnostics(text: string, cwd: string): string {
   );
 }
 
+/** Determine whether execution should bypass framing and run with direct stdio. */
+export function isRawExecution(options: ExecOptions): boolean {
+  return !options.dryRun &&
+    (options.raw ??
+      (options.select === "one" && !options.all && !options.quiet));
+}
+
 /** Borderless suite dashboard with bounded logs and append-only CI fallback. */
 export function createReporter(options: ExecOptions = {}): Reporter {
+  if (isRawExecution(options)) return () => {};
   let rows: Row[] = [],
     height = 0,
     timer: ReturnType<typeof setInterval> | undefined;

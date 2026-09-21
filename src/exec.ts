@@ -1,7 +1,12 @@
 import { discover } from "./discovery.ts";
 import { resolvePath } from "./paths.ts";
 import { resolveParser } from "./parsers.ts";
-import { choose, createReporter, isInteractive } from "./terminal.ts";
+import {
+  choose,
+  createReporter,
+  isInteractive,
+  isRawExecution,
+} from "./terminal.ts";
 import type {
   CommandResult,
   ExecOptions,
@@ -219,6 +224,7 @@ export async function plan(
 async function execute(job: Job, report: Reporter): Promise<CommandResult> {
   const start = performance.now();
   const { plan, options, parser } = job;
+  const isRaw = isRawExecution(options);
   const base: CommandResult = {
     ...plan,
     code: 0,
@@ -231,21 +237,25 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     diagnostics: {},
   };
   if (options.signal?.aborted) {
-    const result = { ...base, code: 130, aborted: true };
+    const code = isRaw ? 0 : 130;
+    const result = { ...base, code, aborted: true, success: isRaw };
     report({ type: "finish", result });
     return result;
   }
   report({ type: "start", command: plan });
   let child: Deno.ChildProcess;
-  const grouped = Deno.build.os !== "windows" && options.stdin !== "inherit";
+  const stdinMode = isRaw ? "inherit" : (options.stdin ?? "null");
+  const stdoutMode = isRaw ? "inherit" : "piped";
+  const stderrMode = isRaw ? "inherit" : "piped";
+  const grouped = Deno.build.os !== "windows" && stdinMode !== "inherit";
   try {
     child = new Deno.Command(plan.command[0]!, {
       args: plan.command.slice(1),
       cwd: plan.cwd,
       env: plan.env,
-      stdin: options.stdin ?? "null",
-      stdout: "piped",
-      stderr: "piped",
+      stdin: stdinMode,
+      stdout: stdoutMode,
+      stderr: stderrMode,
       detached: grouped,
     }).spawn();
   } catch (error) {
@@ -347,19 +357,38 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     }
     return new TextDecoder().decode(captured);
   };
-  const stdoutRead = read(child.stdout, "stdout");
-  const stderrRead = read(child.stderr, "stderr");
+  let stdout = "", stderr = "";
+  let status: Deno.CommandStatus;
+  let stdoutRead: Promise<string> | undefined;
+  let stderrRead: Promise<string> | undefined;
   try {
-    const [status, stdout, stderr] = await Promise.all([
-      child.status,
-      stdoutRead,
-      stderrRead,
-    ]);
-    const code = timedOut ? 124 : aborted ? 130 : status.code;
+    if (isRaw) {
+      status = await child.status;
+    } else {
+      stdoutRead = read(child.stdout, "stdout");
+      stderrRead = read(child.stderr, "stderr");
+      const [s, out, err] = await Promise.all([
+        child.status,
+        stdoutRead,
+        stderrRead,
+      ]);
+      status = s;
+      stdout = out;
+      stderr = err;
+    }
+    let code = timedOut ? 124 : aborted ? 130 : status.code;
+    let success = code === 0;
+    if (
+      isRaw &&
+      (aborted || status.code === 130 || status.signal === "SIGINT")
+    ) {
+      code = 0;
+      success = true;
+    }
     const result: CommandResult = {
       ...base,
       code,
-      success: code === 0,
+      success,
       durationMs: performance.now() - start,
       stdout,
       stderr,
@@ -367,14 +396,14 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
       aborted,
       diagnostics: {},
     };
-    if (parser && !truncated) {
+    if (parser && !truncated && !isRaw) {
       try {
         result.diagnostics = parser.parse({ stdout, stderr, code });
       } catch (error) {
         result.parserError = String(error);
       }
     }
-    if (options.gate) {
+    if (options.gate && !isRaw) {
       const reasons: string[] = [];
       for (const [key, value] of Object.entries(options.gate)) {
         const metric = key === "maxErrors"
@@ -397,7 +426,15 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     return result;
   } catch (error) {
     stop();
-    await Promise.allSettled([child.status, stdoutRead, stderrRead]);
+    if (isRaw) {
+      await child.status.catch(() => {});
+    } else {
+      await Promise.allSettled([
+        child.status,
+        ...(stdoutRead ? [stdoutRead] : []),
+        ...(stderrRead ? [stderrRead] : []),
+      ]);
+    }
     throw error;
   } finally {
     if (timeout !== undefined) clearTimeout(timeout);
@@ -431,13 +468,16 @@ export async function batch(
     if (labels.get(jobs[i]!.plan.id)! > 1) jobs[i]!.plan.id += `#${i + 1}`;
   }
   positive(options.jobs, "jobs");
+  const isRaw = isRawExecution(options);
   const report = options.reporter ?? createReporter(options);
   const slots = options.parallel
     ? options.jobs ?? Math.max(1, Math.min(8, navigator.hardwareConcurrency))
     : 1;
   if (
-    (options.stdin === "inherit" ||
-      jobs.some((job) => job.options.stdin === "inherit")) &&
+    (options.stdin === "inherit" || isRaw ||
+      jobs.some((job) =>
+        job.options.stdin === "inherit" || isRawExecution(job.options)
+      )) &&
     slots > 1 && jobs.length > 1
   ) throw new Error("Inherited stdin requires sequential execution");
   let preparation: RunSummary | undefined;
@@ -520,7 +560,7 @@ export async function batch(
         completed.find((r) => !r.success && !r.aborted)?.code ??
         completed.find((r) => !r.success)?.code ??
         (options.signal?.aborted
-          ? 130
+          ? (isRaw ? 0 : 130)
           : completed.some((r) => r.gate?.success === false)
           ? 1
           : 0);

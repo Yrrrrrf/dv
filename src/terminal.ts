@@ -78,7 +78,7 @@ export function formatCommand(
     env.length ? `env ${env.map(([k, v]) => q(`${k}=${v}`)).join(" ")} ` : ""
   }${argv})`;
 }
-export { createReporter } from "./reporting.ts";
+export { createReporter, isRawExecution } from "./reporting.ts";
 
 /** Label and value for interactive completion and selection. */
 export interface Choice {

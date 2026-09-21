@@ -293,3 +293,44 @@ Deno.test("sh replay executes the same argv, cwd, and overrides", async () => {
     equal(new TextDecoder().decode(replay.stdout), direct.results[0]!.stdout);
   });
 });
+
+Deno.test("raw execution runs directly, normalizes exit 130 to 0, and propagates real failures", async () => {
+  const rawExit130 = await exec(["deno", "eval", "Deno.exit(130)"], {
+    raw: true,
+    throwOnError: false,
+  });
+  equal(rawExit130.code, 0);
+  equal(rawExit130.success, true);
+
+  const rawExit42 = await exec(["deno", "eval", "Deno.exit(42)"], {
+    raw: true,
+    throwOnError: false,
+  });
+  equal(rawExit42.code, 42);
+  equal(rawExit42.success, false);
+
+  await temp(async (root) => {
+    await Deno.mkdir(`${root}/apps/app1`, { recursive: true });
+    const selectOneResult = await exec(["deno", "eval", "Deno.exit(130)"], {
+      root,
+      cwd: "apps/*",
+      select: "one",
+      target: "app1",
+      throwOnError: false,
+    });
+    equal(selectOneResult.code, 0);
+    equal(selectOneResult.success, true);
+
+    const noRawResult = await exec(["deno", "eval", "Deno.exit(130)"], {
+      root,
+      cwd: "apps/*",
+      select: "one",
+      raw: false,
+      target: "app1",
+      quiet: true,
+      throwOnError: false,
+    });
+    equal(noRawResult.code, 130);
+    equal(noRawResult.success, false);
+  });
+});
