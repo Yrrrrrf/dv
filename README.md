@@ -5,7 +5,7 @@ heterogeneous command matrices, preparation, execution, and grouped terminal
 reporting. MIT licensed. Deno 2.9.5+. No runtime dependencies, Node/Bun
 launcher, or implicit project configuration file.
 
-This is the **0.2.0 source distribution**. Registry examples apply after
+This is the **0.0.4 source distribution**. Registry examples apply after
 publishing. The package remains `@yrrrrrf/dv` on JSR; there is no npm release in
 this project.
 
@@ -49,6 +49,86 @@ exit status before the next dependency. This preserves quoted values and
 forwards flags to every stage. See the
 [Just manual](https://just.systems/man/en/) for its recipe and argument model.
 dv itself does not require Nushell or Just; only the Just consumer does.
+
+## One recipe menu, with or without Just
+
+The main menu consumes recipe metadata. It has no dependency on a justfile.
+TypeScript workspaces supply the tasks declared in `createPipeline()`; the
+optional Just adapter supplies recipes from Just's structured dump. Both use the
+same grouped picker, input editor and styling.
+
+```sh
+# Standalone TypeScript workspace (no Just or Nushell required)
+deno run -A example/workspace.ts menu
+# The existing entrypoint works identically
+deno run -A example/pipeline.ts menu
+# Optional Just consumer
+just --justfile example/justfile menu
+```
+
+For your own `workspace.ts`, keep the recipes in that workspace:
+
+```ts
+import { createPipeline } from "jsr:@yrrrrrf/dv@0.0.4";
+
+const workspace = createPipeline({
+  test: {
+    group: "test",
+    description: "Test the workspace",
+    run: ({ exec }) => exec(["deno", "test"]),
+  },
+  types: {
+    group: "check",
+    description: "Check entrypoint types",
+    run: ({ exec }) => exec(["deno", "check", "mod.ts"]),
+  },
+  ci: {
+    group: "ci",
+    description: "Tests first, then types",
+    deps: ["test", "types"],
+  },
+});
+
+if (import.meta.main) Deno.exit(await workspace.cli());
+```
+
+Run `deno run -A workspace.ts menu`, or call `await workspace.menu()` from
+TypeScript. `workspace.recipes()` exposes the same visible metadata used by
+`workspace.list()` and the menu. No second recipe registry is necessary. The
+registry already contains executable tasks; the picker returns a selected recipe
+rather than interpreting arbitrary shell commands.
+
+- Empty search shows group headings in the same order as `list()`.
+- Typing ranks recipe names and searches groups/descriptions; matching name
+  characters are highlighted and results retain group labels.
+- Recipe names are bold, descriptions are dim italic, and group colors are
+  consistent between the menu and listing. Color is optional; labels and the
+  selection pointer remain meaningful in plain text.
+- Arrow keys navigate; Tab completes; Enter accepts; Esc/Ctrl-C cancels.
+  Left/right, Home/End, Delete/Backspace, Ctrl-A/E, Ctrl-U and Ctrl-W edit
+  input. Page Up/Down scroll through results. Bracketed paste cannot submit
+  embedded newlines. The viewport follows terminal size; very long details are
+  clipped.
+- TypeScript menus offer an optional workflow-options field using the normal dv
+  argument parser. Existing CLI options, targets and `--all` are preserved.
+  Completion is skipped for an explicit target or `--all`; otherwise **Use
+  recipe default** leaves the target unspecified. Task `args` stays display
+  metadata, not a custom argument schema.
+- Just menus offer an argv field for the selected recipe's declared parameters.
+  `--complete recipe patterns...` supplies target suggestions to this field; it
+  does not force a target. Quotes preserve spaces and explicit empty values.
+  Just validates parameter semantics and evaluates its own default expressions.
+- Cancellation restores input mode. Noninteractive or `TERM=dumb` terminals
+  should use direct recipe invocation. TypeScript menu calls reject
+  `interactive: false` and CLI `menu --json` rather than opening a prompt.
+
+Color detection uses the actual destination stream. `NO_COLOR` disables styles;
+otherwise an explicit `FORCE_COLOR` is respected (`0` disables it). Automatic
+color uses a terminal other than `TERM=dumb`. Captured children inherit explicit
+color settings; when the parent can display color and no override exists, dv
+supplies `FORCE_COLOR=1`. Tools that ignore that convention may still need their
+own flags. Raw execution and transparent Just dispatch inherit native streams.
+Parsing uses plain text while retained command results keep original output.
 
 ## Grouped output
 
@@ -95,9 +175,10 @@ metrics remain absent. A silent successful check displays `✓ success`.
 Unknown tools retain live output. URL lines remain visible for readiness.
 Successful recognized commands expose bounded warning excerpts. Failures show a
 labeled tail of captured output; `-v` shows the retained capture. Common
-`file.ts:line:column` diagnostics become OSC 8 links on terminals. Logs are
-sanitized for terminal control sequences; unmodified per-stream bytes are
-decoded into structured results until the capture limit is reached.
+`file.ts:line:column` diagnostics become OSC 8 links on terminals. Captured log
+colors and text styles are preserved when color is enabled; cursor movement,
+screen clearing and child OSC controls are removed; unmodified per-stream bytes
+are decoded into structured results until the capture limit is reached.
 
 The live view refreshes at most every 100ms between events. It restores the
 cursor on normal completion, cancellation, and errors, and falls back to static
@@ -386,11 +467,14 @@ Deliberately detached descendants are outside this contract. Linux behavior is
 covered here; Windows/macOS still need native validation.
 
 `dv list/menu --justfile ...` are optional metadata/navigation conveniences
-using Just's JSON dump. The selector supports fuzzy search, arrows, Tab, Enter,
-and Ctrl-C. It does not install shell completions. Flat/imported Just recipes
-are supported; submodule navigation and arbitrary default-expression evaluation
-are not provided. Importing dv performs no subprocess, config read, or signal
-setup.
+using Just's JSON dump. Public flat/imported recipes, aliases and namespaced
+submodule recipes are listed. Default expressions remain Just's responsibility:
+blank argument input passes no arguments, and quoted empty strings remain empty
+arguments. The menu forwards the exact argv and inherits all three terminal
+streams. It does not interpolate dv placeholders or normalize Just's exit
+status. Menu UI hints go to stderr; the selected recipe retains its own
+stdout/stderr. It does not install shell completions. Importing dv performs no
+subprocess, config read, or signal setup.
 
 ## Develop and publish
 
@@ -401,6 +485,17 @@ deno task test
 DV_TEST_JUST=/absolute/path/to/just DV_TEST_NU=/absolute/path/to/nu deno task test
 deno publish --dry-run
 ```
+
+Optional POSIX terminal integration tests use only Python's standard library:
+
+```sh
+DV_TEST_DENO=/absolute/path/to/deno DV_TEST_JUST=/absolute/path/to/just \
+  python3 test/pty_menu_test.py
+```
+
+These launch a real `workspace.ts` without a justfile, exercise Just dispatch,
+compare default and literal arguments, check native colors/TTY attachment,
+preserve failures, and verify terminal-mode restoration on cancellation.
 
 Tests cover process cleanup, bounded concurrency/capture, argv preservation,
 selection, removal, parsers, grouped/TTY reporting, matrix ownership,

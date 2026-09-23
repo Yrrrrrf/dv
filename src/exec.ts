@@ -1,3 +1,4 @@
+import { childEnvironment } from "./style.ts";
 import { discover } from "./discovery.ts";
 import { resolvePath } from "./paths.ts";
 import { resolveParser } from "./parsers.ts";
@@ -87,6 +88,7 @@ export async function selectTargets(
   const selected = await choose(
     "Target",
     targets.map((t) => ({ value: t.relative, label: t.relative })),
+    { signal: options.signal, interactive: options.interactive },
   );
   return targets.filter((t) => t.relative === selected);
 }
@@ -252,7 +254,7 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     child = new Deno.Command(plan.command[0]!, {
       args: plan.command.slice(1),
       cwd: plan.cwd,
-      env: plan.env,
+      env: isRaw ? plan.env : childEnvironment(plan.env),
       stdin: stdinMode,
       stdout: stdoutMode,
       stderr: stderrMode,
@@ -379,7 +381,7 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     let code = timedOut ? 124 : aborted ? 130 : status.code;
     let success = code === 0;
     if (
-      isRaw &&
+      isRaw && !timedOut &&
       (aborted || status.code === 130 || status.signal === "SIGINT")
     ) {
       code = 0;

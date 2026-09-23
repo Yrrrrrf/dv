@@ -6,6 +6,8 @@ import type {
 } from "./types.ts";
 import { resolvePath } from "./paths.ts";
 import { stripAnsi } from "./parsers.ts";
+import { clip, displayWidth, plain, sanitize, supportsColor } from "./style.ts";
+export { displayWidth, plain } from "./style.ts";
 import { color, formatCommand, quoteArgument, write } from "./terminal.ts";
 
 /** Compact timing shared by suites and pipelines. */
@@ -13,37 +15,13 @@ export function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(2)}s`;
 }
 
-/** Safe single-line text for terminal labels and captured output. */
-export function plain(text: string): string {
-  // deno-lint-ignore no-control-regex
-  return stripAnsi(text).replace(/[\x00-\x1f\x7f]/g, " ");
-}
-
-/** Approximate terminal cell width, including common wide scripts and emoji. */
-export function displayWidth(text: string): number {
-  let width = 0;
-  for (const c of plain(text)) {
-    if (/\p{Mark}|[\u200d\ufe0f]/u.test(c)) continue;
-    const n = c.codePointAt(0)!;
-    width += n >= 0x1100 && (n <= 0x115f || n >= 0x2e80 && n <= 0xa4cf ||
-        n >= 0xac00 && n <= 0xd7a3 || n >= 0xf900 && n <= 0xfaff ||
-        n >= 0xfe10 && n <= 0xfe6f || n >= 0xff01 && n <= 0xff60 ||
-        n >= 0x1f000)
-      ? 2
-      : 1;
-  }
-  return width;
-}
 function clamp(text: string, width: number): string {
-  text = plain(text);
-  if (displayWidth(text) <= width) return text;
-  let result = "";
-  for (const c of text) {
-    if (displayWidth(result + c) > width - 1) break;
-    result += c;
-  }
-  return result + "…";
+  return clip(text, width);
 }
+const styledLog = (text: string): string => {
+  const value = sanitize(text, supportsColor());
+  return value.includes("\x1b[") ? value + "\x1b[0m" : value;
+};
 const pad = (text: string, width: number): string =>
   plain(text) + " ".repeat(Math.max(0, width - displayWidth(text)));
 
@@ -199,7 +177,9 @@ export function createReporter(options: ExecOptions = {}): Reporter {
         -3,
       ) ?? [];
     const lines = [
-      ...tail.map((l) => `    │ ${clamp(l, Math.max(1, size.columns - 8))}`),
+      ...tail.map((l) =>
+        `    │ ${clip(l, Math.max(1, size.columns - 8), supportsColor())}`
+      ),
       ...rowsText(
         rows,
         frames[frame++ % frames.length]!,
@@ -220,7 +200,7 @@ export function createReporter(options: ExecOptions = {}): Reporter {
     clear();
     write(
       `\n  ${plain(heading)}\n` +
-        lines.map((l) => `    │ ${linkifyDiagnostics(plain(l), cwd)}`).join(
+        lines.map((l) => `    │ ${linkifyDiagnostics(styledLog(l), cwd)}`).join(
           "\n",
         ) + "\n\n",
     );
@@ -293,9 +273,12 @@ export function createReporter(options: ExecOptions = {}): Reporter {
       paint();
     } else if (event.type === "output") {
       const row = rows.find((r) => r.plan.id === event.command.id);
-      const lines = event.text.split(/\r?\n/).filter(Boolean).map(plain);
+      const lines = event.text.split(/\r?\n/).filter(Boolean).map(styledLog);
       if (row) {
-        row.tail = [...row.tail, ...lines.map((l) => clamp(l, 180))].slice(-5);
+        row.tail = [
+          ...row.tail,
+          ...lines.map((l) => clip(l, 180, supportsColor())),
+        ].slice(-5);
       }
       const stream = settings.logs === "stream" || options.report === "stream";
       // Unknown tools and readiness URLs remain observable during long-running work.

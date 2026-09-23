@@ -34,8 +34,9 @@ export {
   formatCommand,
   isInteractive,
   quoteArgument,
+  readInput,
 } from "./terminal.ts";
-export type { Choice } from "./terminal.ts";
+export type { Choice, InputOptions, PromptOptions } from "./terminal.ts";
 export { filePath } from "./paths.ts";
 export { listJust, menuJust, readJust, recipesFromDump } from "./just.ts";
 export type { JustMenuOptions, JustParameter, JustRecipe } from "./just.ts";
@@ -49,3 +50,5 @@ if (import.meta.main) Deno.exit(await main());
 export { matrix, planMatrix } from "./matrix.ts";
 export type { MatrixOptions, MatrixRule } from "./matrix.ts";
 export { conciseCommand, formatDuration, resultBadge } from "./reporting.ts";
+
+export { chooseRecipe } from "./menu.ts";

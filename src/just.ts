@@ -1,10 +1,12 @@
 import { discover } from "./discovery.ts";
-import { exec } from "./exec.ts";
+import { launchRecipe } from "./launch.ts";
 import { resolvePath } from "./paths.ts";
-import { formatRecipes } from "./pipeline.ts";
-import { choose, isInteractive, write } from "./terminal.ts";
+import { formatRecipes } from "./recipes.ts";
+import { quoteArgument, readInput } from "./terminal.ts";
+import { chooseRecipe } from "./menu.ts";
+import { requireInteractive } from "./prompts.ts";
 import { splitArguments } from "./cli/args.ts";
-import type { RecipeInfo } from "./pipeline.ts";
+import type { RecipeInfo } from "./recipes.ts";
 
 /** Minimal recipe parameter metadata supplied by Just. */
 export interface JustParameter {
@@ -20,6 +22,7 @@ export interface JustParameter {
 export interface JustRecipe extends RecipeInfo {
   parameters: JustParameter[];
   attributes: unknown[];
+  aliasFor?: string;
 }
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -36,21 +39,29 @@ const valueText = (value: unknown): string =>
 
 /** Read Just's structured dump without executing recipe bodies or parsing shell source. */
 export function recipesFromDump(dump: unknown): JustRecipe[] {
+  return readRecipes(dump, "");
+}
+
+function readRecipes(dump: unknown, prefix: string): JustRecipe[] {
   const root = record(dump);
   if (!root.recipes || typeof root.recipes !== "object") {
     throw new Error("Unsupported Just dump: missing recipes map");
   }
   const recipes: JustRecipe[] = [];
+  const hidden = new Set<string>();
   for (const [key, value] of Object.entries(record(root.recipes))) {
     const recipe = record(value);
-    const name = typeof recipe.name === "string" ? recipe.name : key;
+    const localName = typeof recipe.name === "string" ? recipe.name : key;
+    const name = typeof recipe.namepath === "string"
+      ? recipe.namepath
+      : prefix + localName;
     const attributes = Array.isArray(recipe.attributes)
       ? recipe.attributes
       : [];
     if (
-      recipe.private === true || name.startsWith("_") ||
+      recipe.private === true || localName.startsWith("_") ||
       attributes.some((a) => a === "private" || "private" in record(a))
-    ) continue;
+    ) hidden.add(name);
     const parameters: JustParameter[] =
       (Array.isArray(recipe.parameters) ? recipe.parameters : []).map((p) => {
         const item = record(p);
@@ -92,7 +103,33 @@ export function recipesFromDump(dump: unknown): JustRecipe[] {
       attributes,
     });
   }
-  return recipes;
+  for (const [key, value] of Object.entries(record(root.aliases))) {
+    const alias = record(value);
+    const localName = String(alias.name ?? key);
+    const attributes = Array.isArray(alias.attributes) ? alias.attributes : [];
+    if (
+      localName.startsWith("_") || alias.private === true ||
+      attributes.some((a) => a === "private" || "private" in record(a))
+    ) continue;
+    const target = recipes.find((r) =>
+      r.name === prefix + String(alias.target)
+    );
+    if (target) {
+      recipes.push({
+        ...target,
+        name: prefix + localName,
+        aliasFor: target.name,
+        description: target.description || `Alias for ${target.name}`,
+        attributes,
+      });
+    }
+  }
+  for (const [name, module] of Object.entries(record(root.modules))) {
+    if (!name.startsWith("_") && record(module).private !== true) {
+      recipes.push(...readRecipes(module, `${prefix}${name}::`));
+    }
+  }
+  return recipes.filter((r) => !hidden.has(r.name));
 }
 
 /** Inspect an optional Just dependency only when the caller requests Just integration. */
@@ -128,95 +165,52 @@ export interface JustMenuOptions {
   complete?: Readonly<Record<string, readonly string[]>>;
   root?: string;
   signal?: AbortSignal;
+  interactive?: boolean;
 }
 
-/** Choose a recipe and target, then dispatch through Just to preserve dependencies. */
+/** The optional Just provider supplies metadata to the shared recipe menu. */
 export async function menuJust(
   justfile: string,
   options: JustMenuOptions = {},
 ): Promise<number> {
-  if (!isInteractive()) {
-    throw new Error("The Just menu requires an interactive terminal");
-  }
+  requireInteractive(options);
   justfile = resolvePath(justfile);
-  const root = options.root ?? justfile.slice(0, justfile.lastIndexOf("/"));
-  const recipes = (await readJust(justfile)).filter((r) => r.name !== "menu");
-  const name = await choose(
-    "Recipe",
-    recipes.map((r) => ({
-      value: r.name,
-      label: r.name,
-      description: r.description,
-    })),
+  const root = options.root ??
+    resolvePath(".", justfile.slice(0, justfile.lastIndexOf("/")) || "/");
+  const recipes = (await readJust(justfile)).filter((r) =>
+    r.name.split("::").at(-1) !== "menu" &&
+    r.aliasFor?.split("::").at(-1) !== "menu"
   );
-  const recipe = recipes.find((r) => r.name === name)!;
-  const args: string[] = [];
-  const patterns = options.complete?.[name];
-  if (patterns) {
-    const targets = await discover(patterns, { root });
-    args.push(
-      await choose(
-        "Target",
-        targets.map((t) => ({ value: t.relative, label: t.relative })),
+  const recipe = await chooseRecipe(recipes, options);
+  const patterns = options.complete?.[recipe.name];
+  const targets = patterns ? await discover(patterns, { root }) : [];
+  // One argv editor preserves Just's defaults, flags, variadics and empty quoted
+  // strings. Completion suggests values; it never inserts a mandatory target.
+  const answer = recipe.args
+    ? await readInput("Arguments", {
+      ...options,
+      suggestions: targets.map((t) =>
+        /^[\w./-]+$/.test(t.relative) ? t.relative : quoteArgument(t.relative)
       ),
-    );
-  }
-  const firstPositional = recipe.parameters.findIndex((p) =>
-    !p.long && !p.short
-  );
-  for (const [i, parameter] of recipe.parameters.entries()) {
-    if (parameter.long || parameter.short) {
-      const flag = parameter.long
-        ? `--${parameter.long}`
-        : `-${parameter.short}`;
-      if (parameter.flag) {
-        const enabled = await choose(flag, [{ value: "no", label: "No" }, {
-          value: "yes",
-          label: "Yes",
-          description: parameter.help,
-        }]);
-        if (enabled === "yes") args.push(flag);
-      } else {
-        const answer = prompt(`${flag} (blank uses the recipe default):`);
-        if (answer === null) throw new Error("Selection cancelled");
-        if (answer) args.push(flag, answer);
-      }
-      continue;
-    }
-    if (
-      i === firstPositional && patterns &&
-      !/star|plus|variadic/i.test(parameter.kind)
-    ) {
-      continue;
-    }
-    if (/star|plus|variadic/i.test(parameter.kind)) {
-      write(
-        "Execution options: -v verbose, -p parallel, -b timing, --dry-run\n",
-      );
-      const answer = prompt(`${parameter.name} (optional extra arguments):`);
-      if (answer === null) throw new Error("Selection cancelled");
-      args.push(...splitArguments(answer));
-    } else {
-      const answer = prompt(
-        `${parameter.name}${
-          parameter.default == null ? "" : ` [${valueText(parameter.default)}]`
-        }:`,
-      );
-      if (answer === null) throw new Error("Selection cancelled");
-      if (!answer && parameter.default == null) {
-        throw new Error(`Required argument: ${parameter.name}`);
-      }
-      if (!answer && typeof parameter.default !== "string") break;
-      args.push(answer || valueText(parameter.default));
-    }
-  }
-  const result = await exec(["just", "--justfile", justfile, name, ...args], {
-    root,
-    stdin: "inherit",
-    parser: "raw",
-    verbose: true,
+      hint:
+        `${recipe.args} · blank uses recipe defaults · quote arguments containing spaces`,
+      validate: (text) => {
+        try {
+          splitArguments(text);
+        } catch (error) {
+          return String(error instanceof Error ? error.message : error);
+        }
+      },
+    })
+    : "";
+  return await launchRecipe([
+    "just",
+    "--justfile",
+    justfile,
+    recipe.name,
+    ...splitArguments(answer),
+  ], {
+    cwd: root,
     signal: options.signal,
-    throwOnError: false,
   });
-  return result.code;
 }

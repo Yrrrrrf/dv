@@ -8,7 +8,7 @@ import { withSignals } from "../signals.ts";
 import type { RemoveOptions } from "../remove.ts";
 
 /** Package version, shared by the CLI and public API. */
-export const VERSION = "0.2.0";
+export const VERSION = "0.0.4";
 /** CLI help, kept beside the actual option parser. */
 export const HELP = `dv ${VERSION} — commands, composed.
 

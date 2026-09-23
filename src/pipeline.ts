@@ -3,8 +3,14 @@ import { RemovalError, rm } from "./remove.ts";
 import { matrix } from "./matrix.ts";
 import type { MatrixOptions, MatrixRule } from "./matrix.ts";
 import { formatDuration, plain } from "./reporting.ts";
-import { choose, color, write } from "./terminal.ts";
-import { parseArgs } from "./cli/args.ts";
+import { readInput, write } from "./terminal.ts";
+import { requireInteractive } from "./prompts.ts";
+import { chooseRecipe, chooseTarget, workflowSuggestions } from "./menu.ts";
+import { formatRecipes } from "./recipes.ts";
+import type { RecipeInfo } from "./recipes.ts";
+export { formatRecipes } from "./recipes.ts";
+export type { RecipeInfo } from "./recipes.ts";
+import { parseArgs, splitArguments } from "./cli/args.ts";
 import { withSignals } from "./signals.ts";
 import type { ExecOptions, ExecSpec, RunSummary } from "./types.ts";
 import type { RemovalResult, RemoveOptions } from "./remove.ts";
@@ -72,43 +78,10 @@ export class PipelineError extends Error {
 export interface Pipeline {
   run(name: string, options?: PipelineOptions): Promise<PipelineResult>;
   list(): string;
+  recipes(): RecipeInfo[];
   menu(options?: PipelineOptions): Promise<PipelineResult>;
   cli(args?: readonly string[]): Promise<number>;
 }
-/** Listing row used by both TypeScript workflows and the optional Just adapter. */
-export interface RecipeInfo {
-  name: string;
-  group: string;
-  args: string;
-  description: string;
-}
-
-/** Render grouped recipe metadata without maintaining a second command registry. */
-export function formatRecipes(recipes: readonly RecipeInfo[]): string {
-  const style = (text: string, code: number): string =>
-    Deno.stdout.isTerminal() ? color(text, code) : text;
-  const groups = [...new Set(recipes.map((r) => r.group))];
-  const preferred = ["meta", "dev", "test", "check", "ci", "deploy"];
-  groups.sort((a, b) =>
-    (preferred.includes(a) ? preferred.indexOf(a) : 99) -
-      (preferred.includes(b) ? preferred.indexOf(b) : 99) || a.localeCompare(b)
-  );
-  const width = Math.max(
-    0,
-    ...recipes.map((r) => `${r.name}${r.args ? " " + r.args : ""}`.length),
-  );
-  return "Available recipes:\n" +
-    groups.map((group) =>
-      `\n    ${style(`[${group}]`, 35)}\n` +
-      recipes.filter((r) => r.group === group).map((r) => {
-        const signature = `${r.name}${r.args ? " " + r.args : ""}`;
-        return `    ${style(signature.padEnd(width), 36)}${
-          r.description ? ` # ${r.description}` : ""
-        }`;
-      }).join("\n")
-    ).join("\n") + "\n";
-}
-
 /** Wire a dependency graph in TypeScript with the same engine used by dv exec. */
 export function createPipeline(
   tasks: Readonly<Record<string, Task>>,
@@ -313,33 +286,67 @@ export function createPipeline(
       }
       return summary;
     },
+    recipes() {
+      return visible().map(([name, task]) => ({
+        name,
+        group: task.group ?? "tasks",
+        args: task.args ?? "",
+        description: task.description ?? "",
+      }));
+    },
     list() {
-      return formatRecipes(
-        visible().map(([name, task]) => ({
-          name,
-          group: task.group ?? "tasks",
-          args: task.args ?? "",
-          description: task.description ?? "",
-        })),
-      );
+      return formatRecipes(pipeline.recipes());
     },
     async menu(options = {}) {
-      const name = await choose(
-        "Recipe",
-        visible().map(([name, task]) => ({
-          value: name,
-          label: name,
-          description: task.description,
-        })),
+      const base = {
+        ...defaults,
+        ...options,
+        env: { ...defaults.env, ...options.env },
+      };
+      requireInteractive(base);
+      const { name } = await chooseRecipe(
+        pipeline.recipes().filter((r) => r.name !== "menu"),
+        base,
       );
-      const targets = await tasks[name]!.complete?.();
-      const target = targets?.length
-        ? await choose(
-          "Target",
-          targets.map((value) => ({ value, label: value })),
-        )
-        : options.target;
-      return await pipeline.run(name, { ...options, target });
+      const parse = (value: string) => {
+        const parsed = parseArgs(splitArguments(value));
+        if (parsed.command.length || parsed.json || parsed.help) {
+          throw new Error(
+            "Enter workflow options only; use the direct CLI for --json or --help",
+          );
+        }
+        return parsed.options;
+      };
+      const extra = await readInput("Options", {
+        ...base,
+        suggestions: workflowSuggestions,
+        hint: "Optional workflow arguments · blank keeps the current settings",
+        validate: (value) => {
+          try {
+            parse(value);
+          } catch (error) {
+            return String(error instanceof Error ? error.message : error);
+          }
+        },
+      });
+      const entered = parse(extra);
+      const execution = {
+        ...base,
+        ...entered,
+        env: { ...base.env, ...entered.env },
+      };
+      if (execution.target && execution.all) {
+        throw new Error("An explicit target cannot be combined with --all");
+      }
+      if (
+        !execution.target && !execution.all && execution.interactive !== false
+      ) {
+        execution.target = await chooseTarget(
+          await tasks[name]!.complete?.() ?? [],
+          execution,
+        );
+      }
+      return await pipeline.run(name, execution);
     },
     async cli(args = Deno.args) {
       let json = false;
