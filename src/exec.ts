@@ -1,3 +1,9 @@
+import type {
+  ChildProcess,
+  ProcessSignal,
+  ProcessStatus,
+} from "./runtime/types.ts";
+import { runtime } from "./runtime/deno.ts";
 import { childEnvironment } from "./style.ts";
 import { discover } from "./discovery.ts";
 import { resolvePath } from "./paths.ts";
@@ -135,7 +141,9 @@ async function jobsFor(spec: ExecSpec, defaults: ExecOptions): Promise<Job[]> {
       value.includes("\0")
     ) throw new Error(`Invalid environment override: ${key}`);
   }
-  const root = resolvePath(await Deno.realPath(options.root ?? Deno.cwd()));
+  const root = resolvePath(
+    await runtime.realPath(options.root ?? runtime.cwd()),
+  );
   const patterns = typeof options.cwd === "string"
     ? [options.cwd]
     : options.cwd ?? ["."];
@@ -176,8 +184,8 @@ async function jobsFor(spec: ExecSpec, defaults: ExecOptions): Promise<Job[]> {
     const command = spec.command.flatMap((arg) =>
       arg === "{files}" ? files.map((f) => f.path) : [expand(arg)]
     );
-    // Use this Deno installation even when the parent was launched by absolute path.
-    if (command[0] === "deno") command[0] = Deno.execPath();
+    // Resolve the current Deno only in the native adapter; Node keeps explicit tools.
+    command[0] = runtime.executable(command[0]!);
     const parser = resolveParser(command, options.parser, options.parsers);
     return {
       options,
@@ -245,13 +253,13 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     return result;
   }
   report({ type: "start", command: plan });
-  let child: Deno.ChildProcess;
+  let child: ChildProcess;
   const stdinMode = isRaw ? "inherit" : (options.stdin ?? "null");
   const stdoutMode = isRaw ? "inherit" : "piped";
   const stderrMode = isRaw ? "inherit" : "piped";
-  const grouped = Deno.build.os !== "windows" && stdinMode !== "inherit";
+  const grouped = runtime.os !== "windows" && stdinMode !== "inherit";
   try {
-    child = new Deno.Command(plan.command[0]!, {
+    child = await runtime.spawn(plan.command[0]!, {
       args: plan.command.slice(1),
       cwd: plan.cwd,
       env: isRaw ? plan.env : childEnvironment(plan.env),
@@ -259,7 +267,7 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
       stdout: stdoutMode,
       stderr: stderrMode,
       detached: grouped,
-    }).spawn();
+    });
   } catch (error) {
     const result = {
       ...base,
@@ -273,30 +281,26 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
   let aborted = false, timedOut = false;
   let hardKill: ReturnType<typeof setTimeout> | undefined;
   const treeKills: Promise<unknown>[] = [];
-  const kill = (signal: Deno.Signal) => {
-    if (Deno.build.os === "windows") {
-      try {
-        const killer = new Deno.Command("taskkill", {
+  const kill = (signal: ProcessSignal) => {
+    if (runtime.os === "windows") {
+      const fallback = () => {
+        try {
+          child.kill();
+        } catch { /* already exited */ }
+      };
+      treeKills.push(
+        runtime.spawn("taskkill", {
           args: ["/PID", String(child.pid), "/T", "/F"],
           stdin: "null",
           stdout: "null",
           stderr: "null",
-        }).spawn();
-        treeKills.push(killer.status.then((status) => {
-          if (!status.success) {
-            try {
-              child.kill();
-            } catch { /* already exited */ }
-          }
-        }));
-      } catch {
-        try {
-          child.kill();
-        } catch { /* already exited */ }
-      }
+        }).then((killer) => killer.status).then((status) => {
+          if (!status.success) fallback();
+        }).catch(fallback),
+      );
     } else {
       try {
-        if (grouped) Deno.kill(-child.pid, signal);
+        if (grouped) runtime.kill(-child.pid, signal);
         else child.kill(signal);
       } catch { /* already exited */ }
     }
@@ -360,7 +364,7 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
     return new TextDecoder().decode(captured);
   };
   let stdout = "", stderr = "";
-  let status: Deno.CommandStatus;
+  let status: ProcessStatus;
   let stdoutRead: Promise<string> | undefined;
   let stderrRead: Promise<string> | undefined;
   try {
@@ -473,7 +477,7 @@ export async function batch(
   const isRaw = isRawExecution(options);
   const report = options.reporter ?? createReporter(options);
   const slots = options.parallel
-    ? options.jobs ?? Math.max(1, Math.min(8, navigator.hardwareConcurrency))
+    ? options.jobs ?? Math.max(1, Math.min(8, runtime.hardwareConcurrency()))
     : 1;
   if (
     (options.stdin === "inherit" || isRaw ||

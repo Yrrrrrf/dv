@@ -1,19 +1,23 @@
 {
   "name": "@yrrrrrf/dv",
-  "version": "0.0.4",
-  "description": "Commands, composed. A Deno CLI and TypeScript library for discovery, heterogeneous command matrices, preparation, execution, and grouped terminal reporting.",
+  "version": "0.0.5",
+  "description": "Commands, composed. A Deno CLI and TypeScript library with a generated npm distribution for Node.",
   "author": "Fernando Bryan Reza Campos <fer.rezac@outlook.com>",
   "readme": "README.md",
   "license": "MIT",
+  "imports": { "@deno/dnt": "jsr:@deno/dnt@0.44.0" },
   "exports": {
     ".": "./src/mod.ts",
     "./cli": "./src/cli/mod.ts"
   },
   "tasks": {
-    "check": "deno fmt --check && deno lint && deno check src/mod.ts example/pipeline.ts",
+    "check": "deno run --allow-read script/version.ts --check && deno fmt --check && deno lint && deno check src/mod.ts src/cli/bin.ts src/runtime/node.ts example/pipeline.ts script/dnt.ts script/test-npm.ts",
     "test": "deno test -A test/",
     "coverage": "deno test -A --coverage=coverage test/",
-    "dv": "deno run -A src/mod.ts"
+    "dv": "deno run -A src/mod.ts",
+    "build:npm": "deno run -A script/dnt.ts",
+    "test:npm": "deno task build:npm && deno run -A script/test-npm.ts",
+    "version": "deno run --allow-read --allow-write=src/version.ts script/version.ts"
   },
   "publish": {
     "include": [
@@ -23,5 +27,10 @@
       "deno.json",
       "CHANGELOG.md"
     ]
-  }
+  },
+  "exclude": [
+    "npm/",
+    "dist/"
+  ],
+  "test": { "exclude": ["test/node/"] }
 }

@@ -5,6 +5,11 @@ A critical design document examining the architectural tensions in
 layers, known ecosystem friction points, and future patterns for managing
 complex poly-runner environments without compromising core design principles.
 
+Version note: v0.0.5 retains these general-purpose boundaries and adds a dnt npm
+mirror. Native Deno OS calls now live in `src/runtime/deno.ts`; dnt maps them to
+Node built-ins in `src/runtime/node.ts`. The proposals below remain proposals,
+and no framework compatibility helpers were added in this release.
+
 ---
 
 ## 1. The Core Dilemma: Generic Engine vs. Real-World Friction
@@ -12,8 +17,8 @@ complex poly-runner environments without compromising core design principles.
 `@yrrrrrf/dv` was designed around a strict, Unix-inspired thesis: **Commands,
 composed.**
 
-- **Zero runtime dependencies**: Pure Deno 2 primitives (`Deno.Command`,
-  `Deno.readDir`, `Deno.kill`).
+- **Zero runtime dependencies**: Native Deno primitives and a generated Node
+  adapter using built-ins. dnt is build tooling.
 - **No implicit configuration**: No magic `.dvrc`, implicit project scans, or
   hidden defaults.
 - **Argv preservation**: Raw vector execution (`string[]`), avoiding shell

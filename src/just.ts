@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { discover } from "./discovery.ts";
 import { launchRecipe } from "./launch.ts";
 import { resolvePath } from "./paths.ts";
@@ -134,7 +135,7 @@ function readRecipes(dump: unknown, prefix: string): JustRecipe[] {
 
 /** Inspect an optional Just dependency only when the caller requests Just integration. */
 export async function readJust(justfile: string): Promise<JustRecipe[]> {
-  const output = await new Deno.Command("just", {
+  const output = await runtime.output("just", {
     args: [
       "--justfile",
       resolvePath(justfile),
@@ -145,7 +146,7 @@ export async function readJust(justfile: string): Promise<JustRecipe[]> {
     stdin: "null",
     stdout: "piped",
     stderr: "piped",
-  }).output();
+  });
   if (!output.success) {
     throw new Error(
       new TextDecoder().decode(output.stderr) ||

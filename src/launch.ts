@@ -1,16 +1,17 @@
+import { runtime } from "./runtime/deno.ts";
 /** Transparent recipe dispatch: no interpolation, capture, or status normalization. */
 export async function launchRecipe(
   argv: readonly string[],
   options: { cwd: string; signal?: AbortSignal },
 ): Promise<number> {
   if (options.signal?.aborted) return 130;
-  const child = new Deno.Command(argv[0]!, {
+  const child = await runtime.spawn(argv[0]!, {
     args: argv.slice(1),
     cwd: options.cwd,
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
-  }).spawn();
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
     try {

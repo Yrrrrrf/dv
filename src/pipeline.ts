@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { batch, exec, ExecutionError } from "./exec.ts";
 import { RemovalError, rm } from "./remove.ts";
 import { matrix } from "./matrix.ts";
@@ -348,7 +349,7 @@ export function createPipeline(
       }
       return await pipeline.run(name, execution);
     },
-    async cli(args = Deno.args) {
+    async cli(args = runtime.args) {
       let json = false;
       try {
         const name = args[0] ?? "list";

@@ -2,14 +2,64 @@
 
 **Commands, composed.** A Deno CLI and TypeScript library for discovery,
 heterogeneous command matrices, preparation, execution, and grouped terminal
-reporting. MIT licensed. Deno 2.9.5+. No runtime dependencies, Node/Bun
-launcher, or implicit project configuration file.
+reporting, with a generated ESM npm distribution for Node. MIT licensed. Deno
+2.9.5+ or Node 22+. No runtime dependencies or implicit project configuration
+file.
 
-This is the **0.0.4 source distribution**. Registry examples apply after
-publishing. The package remains `@yrrrrrf/dv` on JSR; there is no npm release in
-this project.
+This is the **0.0.5 source distribution**. The maintained source is published to
+JSR as `@yrrrrrf/dv`; `script/dnt.ts` generates the npm mirror with the same
+package identity and public API. Registry examples apply after publication. This
+archive does not establish that either registry has published 0.0.5.
 
-## Two independent consumers
+## Build and use the Node distribution
+
+Building requires Deno, Node and npm. Using the generated package requires only
+Node and the external tools explicitly requested by your recipes.
+
+```sh
+deno task build:npm             # pinned dnt 0.44.0, output in npm/
+deno task test:npm              # build, pack, native Node tests and NodeNext types
+node npm/esm/cli/bin.js --version
+node npm/esm/cli/bin.js exec --json -- node -e 'console.log("hello")'
+node example/node-workspace.mjs list
+node example/node-workspace.mjs ci
+node example/node-workspace.mjs menu
+```
+
+`test:npm` also leaves the actual npm archive in `dist/`. Install it locally:
+
+```sh
+npm install /absolute/path/to/dist/yrrrrrf-dv-0.0.5.tgz
+npx dv --help
+```
+
+In an installed consumer:
+
+```js
+import { createPipeline, exec } from "@yrrrrrf/dv";
+import { main } from "@yrrrrrf/dv/cli";
+
+await exec(["node", "--version"]);
+const workspace = createPipeline({
+  test: { run: ({ exec }) => exec(["node", "--test"]) },
+});
+process.exitCode = await workspace.cli();
+```
+
+The npm package is ESM with adjacent declarations and an installed `dv` binary.
+CommonJS `require()` is not an advertised entrypoint. Deno remains the
+maintained source; generated output is rebuilt rather than edited. A narrow dnt
+module mapping supplies Node built-ins for OS operations. There is no runtime
+Deno shim or execution-library dependency. See
+[the build guide](docs/NPM_BUILD.md).
+
+The host and child executable remain separate: a Node-hosted dv recipe invoking
+`deno test` still requires Deno. Existing Deno examples deliberately retain
+their Deno commands; `example/node-workspace.mjs` demonstrates a Node-only
+workspace. Importing the generated package starts no process, attaches no
+input/signal listeners, and reads no project configuration.
+
+## Two independent Deno consumers
 
 `example/pipeline.ts` declares its entire graph in TypeScript and imports dv.
 `example/justfile` independently declares the same recipes and wires them using
@@ -69,7 +119,7 @@ just --justfile example/justfile menu
 For your own `workspace.ts`, keep the recipes in that workspace:
 
 ```ts
-import { createPipeline } from "jsr:@yrrrrrf/dv@0.0.4";
+import { createPipeline } from "jsr:@yrrrrrf/dv@0.0.5";
 
 const workspace = createPipeline({
   test: {
@@ -239,7 +289,9 @@ await rm(["build", "coverage"], { dryRun: true });
 `exec()` / `batch()` accept argv vectors. Shell evaluation only occurs when the
 caller explicitly invokes a shell. Arguments after CLI `--` remain intact except
 for explicit `{root}`, `{cwd}`, `{name}`, and standalone `{files}` substitution.
-The first executable `deno` resolves to the running `Deno.execPath()`.
+Under a Deno host, the first executable `deno` resolves to the running
+`Deno.execPath()`. Under Node, an explicit `deno` stays `deno` and is resolved
+through the normal executable search.
 
 Directory/file flags are vectors: `--cwd`, `--files`, `--exclude`. Put a
 positional target before vectors. Repeat flags to extend a vector, or use
@@ -502,7 +554,7 @@ selection, removal, parsers, grouped/TTY reporting, matrix ownership,
 preparation, quality policies, pipeline failures, and CLI/API parity.
 Just/Nushell integration is optional for developers who only have Deno.
 
-Implementation is under `src/`, tests under `test/`, and examples under
-`example/`. Public modules are `src/mod.ts` (`.`) and `src/cli/mod.ts`
-(`./cli`). Publishing is a separate explicit operation. See `CHANGELOG.md` for
-migration notes.
+The maintained implementation is under `src/`, build scripts under `script/`,
+tests under `test/`, and examples under `example/`. Public modules are
+`src/mod.ts` (`.`) and `src/cli/mod.ts` (`./cli`). Publishing is a separate
+explicit operation. See `CHANGELOG.md` for migration notes.

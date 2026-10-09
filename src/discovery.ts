@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { basename, containedPath, relativePath, resolvePath } from "./paths.ts";
 import type { DiscoverOptions, Target } from "./types.ts";
 
@@ -57,7 +58,9 @@ export async function discover(
   patterns: readonly string[],
   options: DiscoverOptions = {},
 ): Promise<Target[]> {
-  const root = resolvePath(await Deno.realPath(options.root ?? Deno.cwd()));
+  const root = resolvePath(
+    await runtime.realPath(options.root ?? runtime.cwd()),
+  );
   const mode = options.mode ?? "glob";
   const kind = options.kind ?? "directory";
   const results = new Map<string, Target>();
@@ -88,9 +91,9 @@ export async function discover(
       const path = resolvePath(pattern, root);
       try {
         await containedPath(root, path, kind === "any");
-        add(path, await Deno.lstat(path));
+        add(path, await runtime.lstat(path));
       } catch (error) {
-        if (!(options.allowMissing && error instanceof Deno.errors.NotFound)) {
+        if (!(options.allowMissing && runtime.notFound(error))) {
           throw error;
         }
       }
@@ -101,7 +104,7 @@ export async function discover(
   }
   if (matchers.length) {
     const walk = async (directory: string): Promise<void> => {
-      for await (const entry of Deno.readDir(directory)) {
+      for await (const entry of runtime.readDir(directory)) {
         const path = resolvePath(entry.name, directory);
         const relative = relativePath(root, path);
         if (excluded.some((r) => r.test(relative))) continue;

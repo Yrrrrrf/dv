@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { discover, globRegex } from "./discovery.ts";
 import { batch, selectTargets } from "./exec.ts";
 import { resolvePath } from "./paths.ts";
@@ -33,7 +34,9 @@ export async function planMatrix(
   if (options.match && !["first", "all"].includes(options.match)) {
     throw new Error("matrix match must be first or all");
   }
-  const root = resolvePath(await Deno.realPath(options.root ?? Deno.cwd()));
+  const root = resolvePath(
+    await runtime.realPath(options.root ?? runtime.cwd()),
+  );
   const candidates: {
     rule: MatrixRule;
     index: number;

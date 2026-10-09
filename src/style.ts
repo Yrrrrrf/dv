@@ -1,10 +1,11 @@
 // deno-lint-ignore-file no-control-regex
+import { runtime } from "./runtime/deno.ts";
 /** Terminal presentation shared by listings, prompts and captured output. */
 export type OutputStream = "stdout" | "stderr";
 
 export function environment(name: string): string | undefined {
   try {
-    return Deno.env.get(name);
+    return runtime.env(name);
   } catch {
     return undefined;
   }
@@ -12,10 +13,10 @@ export function environment(name: string): string | undefined {
 
 /** Explicit environment choices win; automatic color follows the actual stream. */
 export function supportsColor(stream: OutputStream = "stderr"): boolean {
-  if (Deno.noColor || environment("NO_COLOR") !== undefined) return false;
+  if (runtime.noColor || environment("NO_COLOR") !== undefined) return false;
   const force = environment("FORCE_COLOR");
   if (force !== undefined) return force !== "0";
-  return Deno[stream].isTerminal() && environment("TERM") !== "dumb";
+  return runtime[stream].isTerminal() && environment("TERM") !== "dumb";
 }
 
 export function color(

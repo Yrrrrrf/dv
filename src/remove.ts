@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { discover } from "./discovery.ts";
 import { containedPath, relativePath, resolvePath, within } from "./paths.ts";
 import { write } from "./terminal.ts";
@@ -36,7 +37,9 @@ export async function rm(
   if (!patterns.length) {
     throw new Error("rm requires at least one path or pattern");
   }
-  const root = resolvePath(await Deno.realPath(options.root ?? Deno.cwd()));
+  const root = resolvePath(
+    await runtime.realPath(options.root ?? runtime.cwd()),
+  );
   const targets = await discover(patterns, {
     root,
     mode: options.mode ?? "path",
@@ -73,11 +76,11 @@ export async function rm(
         );
       }
       if (!options.dryRun) {
-        await Deno.remove(path, { recursive: true });
+        await runtime.remove(path);
         result.removed.push(path);
       }
     } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) {
+      if (!(runtime.notFound(error))) {
         result.failures.push({ path, error: String(error) });
       }
     }

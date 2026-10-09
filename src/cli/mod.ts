@@ -1,3 +1,4 @@
+import { runtime } from "../runtime/deno.ts";
 /** Command-line frontend for @yrrrrrf/dv. Importing it performs no work. */
 import { batch, exec, ExecutionError } from "../exec.ts";
 import { matrix } from "../matrix.ts";
@@ -8,7 +9,8 @@ import { withSignals } from "../signals.ts";
 import type { RemoveOptions } from "../remove.ts";
 
 /** Package version, shared by the CLI and public API. */
-export const VERSION = "0.0.4";
+export { VERSION } from "../version.ts";
+import { VERSION } from "../version.ts";
 /** CLI help, kept beside the actual option parser. */
 export const HELP = `dv ${VERSION} — commands, composed.
 
@@ -71,7 +73,7 @@ Just is needed only by list/menu. Import createPipeline for TypeScript wiring.
 
 /** Run the CLI and return its exit status without terminating an importing process. */
 export async function main(
-  args: readonly string[] = Deno.args,
+  args: readonly string[] = runtime.args,
 ): Promise<number> {
   let json = false;
   try {
@@ -226,4 +228,4 @@ export async function main(
   }
 }
 
-if (import.meta.main) Deno.exit(await main());
+if (runtime.isMain(import.meta)) runtime.exit(await main());

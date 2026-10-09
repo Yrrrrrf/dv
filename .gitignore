@@ -8,6 +8,8 @@
 # generated files
 node_modules
 build
+npm
+coverage
 
 # ide configuration files 
 **.code-workspace

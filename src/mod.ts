@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 /**
  * Deno-native command execution and workflow composition.
  *
@@ -45,7 +46,7 @@ export { main, VERSION } from "./cli/mod.ts";
 export type * from "./types.ts";
 
 import { main } from "./cli/mod.ts";
-if (import.meta.main) Deno.exit(await main());
+if (runtime.isMain(import.meta)) runtime.exit(await main());
 
 export { matrix, planMatrix } from "./matrix.ts";
 export type { MatrixOptions, MatrixRule } from "./matrix.ts";

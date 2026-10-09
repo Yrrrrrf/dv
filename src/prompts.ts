@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import { isInteractive, write } from "./terminal.ts";
 import {
   clip,
@@ -91,7 +92,7 @@ async function readChunk(
   if (signal?.aborted) throw cancelled();
   pendingRead ??= (async () => {
     const buffer = new Uint8Array(4096);
-    const count = await Deno.stdin.read(buffer);
+    const count = await runtime.stdin.read(buffer);
     return count === null
       ? null
       : decoder.decode(buffer.subarray(0, count), { stream: true });
@@ -157,7 +158,7 @@ async function promptEditor(
   const render = () => {
     let columns = 100, rows = 24;
     try {
-      ({ columns, rows } = Deno.consoleSize());
+      ({ columns, rows } = runtime.consoleSize());
     } catch { /* fallback */ }
     columns = Math.max(1, columns - 1);
     rows = Math.max(2, rows - 1);
@@ -264,12 +265,12 @@ async function promptEditor(
     error = "";
   };
   let result: string | undefined;
-  Deno.stdin.setRaw(true);
+  runtime.stdin.setRaw(true);
   const resize = () => render();
   let resizing = false;
   try {
     try {
-      Deno.addSignalListener("SIGWINCH", resize);
+      runtime.addSignalListener("SIGWINCH", resize);
       resizing = true;
     } catch { /* unsupported */ }
     write("\x1b[?2004h");
@@ -361,12 +362,19 @@ async function promptEditor(
     }
     return result;
   } finally {
-    if (resizing) Deno.removeSignalListener("SIGWINCH", resize);
+    if (resizing) runtime.removeSignalListener("SIGWINCH", resize);
     try {
       clear();
       write("\x1b[?2004l");
     } finally {
-      Deno.stdin.setRaw(false);
+      try {
+        runtime.stdin.setRaw(false);
+      } finally {
+        if (runtime.releaseInput()) {
+          pendingRead = undefined;
+          decoder.decode(); // Discard a cancelled Node prompt's partial UTF-8.
+        }
+      }
     }
     if (result !== undefined) {
       const label = selection

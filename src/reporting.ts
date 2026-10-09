@@ -1,3 +1,4 @@
+import { runtime } from "./runtime/deno.ts";
 import type {
   CommandResult,
   ExecOptions,
@@ -112,14 +113,14 @@ function rowsText(
 
 function terminalSize(): { columns: number; rows: number } {
   try {
-    return Deno.consoleSize();
+    return runtime.consoleSize();
   } catch {
     return { columns: 100, rows: 24 };
   }
 }
 function env(name: string): string | undefined {
   try {
-    return Deno.env.get(name);
+    return runtime.env(name);
   } catch {
     return undefined;
   }
@@ -127,7 +128,7 @@ function env(name: string): string | undefined {
 
 /** OSC 8 links for common diagnostic file:line:column forms, relative to the child cwd. */
 export function linkifyDiagnostics(text: string, cwd: string): string {
-  if (!Deno.stderr.isTerminal() || env("TERM") === "dumb") return text;
+  if (!runtime.stderr.isTerminal() || env("TERM") === "dumb") return text;
   return text.replace(
     /((?:[A-Za-z]:)?[\w./\\-]+\.(?:tsx?|jsx?|svelte|vue)):(\d+)(?::(\d+))?/g,
     (display, path: string, line: string, column: string | undefined) => {
@@ -195,7 +196,7 @@ export function createReporter(options: ExecOptions = {}): Reporter {
     write(lines.join("\n") + "\n");
     height = lines.length;
   };
-  const block = (heading: string, lines: string[], cwd = Deno.cwd()) => {
+  const block = (heading: string, lines: string[], cwd = runtime.cwd()) => {
     if (!lines.length) return;
     clear();
     write(
@@ -252,7 +253,8 @@ export function createReporter(options: ExecOptions = {}): Reporter {
       const size = terminalSize();
       live = !event.dryRun && options.report !== "plain" &&
         options.report !== "stream" &&
-        Deno.stderr.isTerminal() && !["true", "1"].includes(env("CI") ?? "") &&
+        runtime.stderr.isTerminal() &&
+        !["true", "1"].includes(env("CI") ?? "") &&
         env("TERM") !== "dumb" &&
         rowsText(rows, "", size.columns).length + 3 < size.rows - 2;
       if (live) {

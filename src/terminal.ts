@@ -1,15 +1,16 @@
+import { runtime } from "./runtime/deno.ts";
 import type { PlannedCommand } from "./types.ts";
 import { color } from "./style.ts";
 export { color } from "./style.ts";
 
 const encoder = new TextEncoder();
-/** Write a complete string to a Deno stream, including partial writes. */
+/** Write a complete string to the selected output stream, including partial writes. */
 export function write(
   text: string,
   stream: "stdout" | "stderr" = "stderr",
 ): void {
   const bytes = encoder.encode(text);
-  const writer = stream === "stdout" ? Deno.stdout : Deno.stderr;
+  const writer = stream === "stdout" ? runtime.stdout : runtime.stderr;
   let offset = 0;
   while (offset < bytes.length) {
     offset += writer.writeSync(bytes.subarray(offset));
@@ -17,7 +18,7 @@ export function write(
 }
 /** Whether interactive input and terminal reporting are both available. */
 export function isInteractive(): boolean {
-  return Deno.stdin.isTerminal() && Deno.stderr.isTerminal();
+  return runtime.stdin.isTerminal() && runtime.stderr.isTerminal();
 }
 /** Print a standalone heading; execution already reports its own command headings. */
 export function banner(title: string): void {
@@ -39,7 +40,7 @@ export function quoteArgument(
 /** Render the resolved cwd, environment overrides, executable and arguments as one command. */
 export function formatCommand(
   plan: PlannedCommand,
-  shell: "sh" | "nu" | "powershell" = Deno.build.os === "windows"
+  shell: "sh" | "nu" | "powershell" = runtime.os === "windows"
     ? "powershell"
     : "sh",
 ): string {

@@ -1,8 +1,9 @@
-// Native Deno paths, with slash-separated internal representation on every OS.
-const windows = Deno.build.os === "windows";
+import { runtime } from "./runtime/deno.ts";
+// Native paths, with slash-separated internal representation on every OS.
+const windows = runtime.os === "windows";
 
 /** Normalize a native absolute path, or resolve a relative path against base. */
-export function resolvePath(path: string, base = Deno.cwd()): string {
+export function resolvePath(path: string, base = runtime.cwd()): string {
   const slash = (p: string) => windows ? p.replaceAll("\\", "/") : p;
   let value = slash(path);
   const parent = slash(base);
@@ -76,7 +77,7 @@ export async function containedPath(
   let current = root;
   for (let i = 0; i < parts.length; i++) {
     current = resolvePath(parts[i]!, current);
-    const stat = await Deno.lstat(current);
+    const stat = await runtime.lstat(current);
     if (stat.isSymlink && !(allowLeafLink && i === parts.length - 1)) {
       throw new Error(`Symlink traversal is not allowed: ${current}`);
     }
