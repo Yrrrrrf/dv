@@ -41,12 +41,12 @@ await build({
   },
   package: {
     ...pkg,
+    types: "./esm/mod.d.ts",
     engines: { node: ">=22.0.0" },
     devDependencies: { "@types/node": "22.20.5" },
     keywords: ["cli", "workflow", "tasks", "deno", "node", "just"],
   },
   postBuild: async () => {
-    await Deno.mkdir(new URL("npm/docs/", root), { recursive: true });
     for (const name of ["README.md", "LICENSE"]) {
       await Deno.copyFile(new URL(name, root), new URL(`npm/${name}`, root));
     }

@@ -28,12 +28,12 @@ export async function synchronizeVersion(check = false): Promise<void> {
   const { version } = await metadata();
   const path = new URL("src/version.ts", root);
   const expected =
-    `/** Generated from deno.json by script/version.ts; no runtime metadata reads. */\nexport const VERSION = ${
+    `/** Generated from deno.json by scripts/version.ts; no runtime metadata reads. */\nexport const VERSION = ${
       JSON.stringify(version)
     };\n`;
   if (check) {
     if (await Deno.readTextFile(path) !== expected) {
-      throw new Error("Version is stale: run deno task version");
+      throw new Error("Version is stale: run scripts/pipeline.ts version");
     }
   } else {
     await Deno.writeTextFile(path, expected);

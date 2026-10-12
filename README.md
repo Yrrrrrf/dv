@@ -17,8 +17,8 @@ Building requires Deno, Node and npm. Using the generated package requires only
 Node and the external tools explicitly requested by your recipes.
 
 ```sh
-deno task build:npm             # pinned dnt 0.44.0, output in npm/
-deno task test:npm              # build, pack, native Node tests and NodeNext types
+deno run -A scripts/pipeline.ts build   # pinned dnt 0.44.0, output in npm/
+deno run -A scripts/pipeline.ts test:npm # build, pack, native Node tests and NodeNext types
 node npm/esm/cli/bin.js --version
 node npm/esm/cli/bin.js exec --json -- node -e 'console.log("hello")'
 node example/node-workspace.mjs list
@@ -531,10 +531,10 @@ subprocess, config read, or signal setup.
 ## Develop and publish
 
 ```sh
-deno task check
-deno task test
+deno run -A scripts/pipeline.ts check
+deno run -A scripts/pipeline.ts test
 # Include real independent-consumer integration tests:
-DV_TEST_JUST=/absolute/path/to/just DV_TEST_NU=/absolute/path/to/nu deno task test
+DV_TEST_JUST=/absolute/path/to/just DV_TEST_NU=/absolute/path/to/nu deno run -A scripts/pipeline.ts test
 deno publish --dry-run
 ```
 
@@ -554,7 +554,7 @@ selection, removal, parsers, grouped/TTY reporting, matrix ownership,
 preparation, quality policies, pipeline failures, and CLI/API parity.
 Just/Nushell integration is optional for developers who only have Deno.
 
-The maintained implementation is under `src/`, build scripts under `script/`,
+The maintained implementation is under `src/`, build scripts under `scripts/`,
 tests under `test/`, and examples under `example/`. Public modules are
 `src/mod.ts` (`.`) and `src/cli/mod.ts` (`./cli`). Publishing is a separate
 explicit operation. See `CHANGELOG.md` for migration notes.

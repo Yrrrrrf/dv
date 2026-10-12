@@ -10,15 +10,6 @@
     ".": "./src/mod.ts",
     "./cli": "./src/cli/mod.ts"
   },
-  "tasks": {
-    "check": "deno run --allow-read script/version.ts --check && deno fmt --check && deno lint && deno check src/mod.ts src/cli/bin.ts src/runtime/node.ts example/pipeline.ts script/dnt.ts script/test-npm.ts",
-    "test": "deno test -A test/",
-    "coverage": "deno test -A --coverage=coverage test/",
-    "dv": "deno run -A src/mod.ts",
-    "build:npm": "deno run -A script/dnt.ts",
-    "test:npm": "deno task build:npm && deno run -A script/test-npm.ts",
-    "version": "deno run --allow-read --allow-write=src/version.ts script/version.ts"
-  },
   "publish": {
     "include": [
       "src/",
