@@ -2,7 +2,12 @@ set shell := ["nu", "-c"]
 set script-interpreter := ["nu"]
 set unstable
 
-[working-directory('npm')]
+[doc('Build the @yrrrrrf/dv package via pipeline')]
+[group('deploy')]
+build:
+    deno run -A scripts/pipeline.ts build
+
+[working-directory('build')]
 [private]
 [script]
 _with-brave +cmd:
@@ -12,7 +17,7 @@ _with-brave +cmd:
     with-env { PATH: ($env.PATH | prepend $d) } { {{ cmd }} }
     print "✓ {{ cmd }} done"
 
-[doc('Publish npm/ to npm')]
+[doc('Publish build/ to npm')]
 [group('deploy')]
 publish: build (_with-brave "bun publish")
 

@@ -6,7 +6,7 @@ import { metadata, root, synchronizeVersion } from "./version.ts";
 await synchronizeVersion();
 const pkg = await metadata();
 const cwd = filePath(root);
-const outDir = filePath(new URL("npm/", root));
+const outDir = filePath(new URL("build/", root));
 await emptyDir(outDir);
 
 await build({
@@ -48,7 +48,7 @@ await build({
   },
   postBuild: async () => {
     for (const name of ["README.md", "LICENSE"]) {
-      await Deno.copyFile(new URL(name, root), new URL(`npm/${name}`, root));
+      await Deno.copyFile(new URL(name, root), new URL(`build/${name}`, root));
     }
   },
 });

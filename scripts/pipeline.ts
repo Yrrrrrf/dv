@@ -12,7 +12,7 @@ const workspace = createPipeline(
       group: "dev",
       description:
         "Remove generated build, npm distribution, and coverage output",
-      run: ({ rm }) => rm(["npm", "dist", "coverage"]),
+      run: ({ rm }) => rm(["build", "dist", "coverage"]),
     },
     version: {
       group: "dev",

@@ -5,7 +5,7 @@ import { metadata, root } from "./version.ts";
 const node = Deno.env.get("DV_TEST_NODE") ?? "node";
 const npm = Deno.env.get("DV_TEST_NPM") ?? "npm";
 const pkg = await metadata();
-const output = filePath(new URL("npm/", root));
+const output = filePath(new URL("build/", root));
 const dist = filePath(new URL("dist/", root));
 await Deno.mkdir(dist, { recursive: true });
 async function run(

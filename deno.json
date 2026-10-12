@@ -16,6 +16,6 @@
   "publish": {
     "include": ["src/", "README.md", "LICENSE", "deno.json", "CHANGELOG.md"]
   },
-  "exclude": ["npm/", "dist/"],
+  "exclude": ["build/", "dist/"],
   "test": { "exclude": ["test/node/"] }
 }
