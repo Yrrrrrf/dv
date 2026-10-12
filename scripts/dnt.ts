@@ -41,6 +41,7 @@ await build({
   },
   package: {
     ...pkg,
+    publishConfig: { access: "public" },
     types: "./esm/mod.d.ts",
     engines: { node: ">=22.0.0" },
     devDependencies: { "@types/node": "22.20.5" },
