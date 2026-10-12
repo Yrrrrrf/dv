@@ -47,15 +47,7 @@ await build({
   },
   postBuild: async () => {
     await Deno.mkdir(new URL("npm/docs/", root), { recursive: true });
-    for (
-      const name of [
-        "README.md",
-        "LICENSE",
-        "CHANGELOG.md",
-        "RELEASE-VALIDATION.md",
-        "docs/NPM_BUILD.md",
-      ]
-    ) {
+    for (const name of ["README.md", "LICENSE"]) {
       await Deno.copyFile(new URL(name, root), new URL(`npm/${name}`, root));
     }
   },
