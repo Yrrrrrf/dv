@@ -11,7 +11,7 @@
     "./cli": "./src/cli/mod.ts"
   },
   "tasks": {
-    "dv": "deno run -A src/mod.ts"
+    "pipeline": "deno run -A scripts/pipeline.ts"
   },
   "publish": {
     "include": ["src/", "README.md", "LICENSE", "deno.json", "CHANGELOG.md"]
