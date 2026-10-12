@@ -2,11 +2,6 @@ set shell := ["nu", "-c"]
 set script-interpreter := ["nu"]
 set unstable
 
-[doc('Build the @yrrrrrf/dv npm distribution via pipeline')]
-[group('deploy')]
-build:
-    deno run -A scripts/pipeline.ts build
-
 [working-directory('npm')]
 [private]
 [script]

@@ -10,18 +10,12 @@
     ".": "./src/mod.ts",
     "./cli": "./src/cli/mod.ts"
   },
-  "publish": {
-    "include": [
-      "src/",
-      "README.md",
-      "LICENSE",
-      "deno.json",
-      "CHANGELOG.md"
-    ]
+  "tasks": {
+    "dv": "deno run -A src/mod.ts"
   },
-  "exclude": [
-    "npm/",
-    "dist/"
-  ],
+  "publish": {
+    "include": ["src/", "README.md", "LICENSE", "deno.json", "CHANGELOG.md"]
+  },
+  "exclude": ["npm/", "dist/"],
   "test": { "exclude": ["test/node/"] }
 }
