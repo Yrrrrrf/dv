@@ -1,9 +1,8 @@
 /** Generate the npm mirror from maintained Deno source. This never publishes. */
 import { build, emptyDir } from "@deno/dnt";
-import { filePath } from "../src/paths.ts";
-import { metadata, root, synchronizeVersion } from "./version.ts";
+import { filePath } from "../src/fs/paths.ts";
+import { metadata, root } from "./version.ts";
 
-await synchronizeVersion();
 const pkg = await metadata();
 const cwd = filePath(root);
 const outDir = filePath(new URL("build/", root));
@@ -19,8 +18,7 @@ await build({
     { name: "./cli", path: "./src/cli/mod.ts" },
     { kind: "bin", name: "dv", path: "./src/cli/bin.ts" },
   ],
-  mappings: { "./src/runtime/deno.ts": "./src/runtime/node.ts" },
-  // Every runtime operation is explicit. No global Deno shim is distributed.
+  // Shared built-ins run in both hosts without a Deno namespace shim.
   shims: {},
   esModule: true,
   scriptModule: false,
@@ -42,14 +40,18 @@ await build({
   package: {
     ...pkg,
     publishConfig: { access: "public" },
-    types: "./esm/mod.d.ts",
     engines: { node: ">=22.0.0" },
     devDependencies: { "@types/node": "22.20.5" },
     keywords: ["cli", "workflow", "tasks", "deno", "node", "just"],
   },
   postBuild: async () => {
-    for (const name of ["README.md", "LICENSE"]) {
+    for (const name of ["README.md", "LICENSE", "CHANGELOG.md"]) {
       await Deno.copyFile(new URL(name, root), new URL(`build/${name}`, root));
     }
+    await Deno.mkdir(new URL("build/docs/", root), { recursive: true });
+    await Deno.copyFile(
+      new URL("docs/NPM_BUILD.md", root),
+      new URL("build/docs/NPM_BUILD.md", root),
+    );
   },
 });

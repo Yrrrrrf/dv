@@ -1,9 +1,10 @@
-import { runtime } from "./runtime/deno.ts";
+import process from "node:process";
+import { lstat } from "node:fs/promises";
 // Native paths, with slash-separated internal representation on every OS.
-const windows = runtime.os === "windows";
+const windows = process.platform === "win32";
 
 /** Normalize a native absolute path, or resolve a relative path against base. */
-export function resolvePath(path: string, base = runtime.cwd()): string {
+export function resolvePath(path: string, base = process.cwd()): string {
   const slash = (p: string) => windows ? p.replaceAll("\\", "/") : p;
   let value = slash(path);
   const parent = slash(base);
@@ -77,8 +78,8 @@ export async function containedPath(
   let current = root;
   for (let i = 0; i < parts.length; i++) {
     current = resolvePath(parts[i]!, current);
-    const stat = await runtime.lstat(current);
-    if (stat.isSymlink && !(allowLeafLink && i === parts.length - 1)) {
+    const stat = await lstat(current);
+    if (stat.isSymbolicLink() && !(allowLeafLink && i === parts.length - 1)) {
       throw new Error(`Symlink traversal is not allowed: ${current}`);
     }
   }
@@ -98,4 +99,10 @@ export function filePath(url: string | URL): string {
   if (windows && /^\/[a-z]:/i.test(path)) path = path.slice(1);
   if (value.hostname) path = `//${value.hostname}${path}`;
   return resolvePath(path);
+}
+
+/** Recognize native missing-path errors without depending on a runtime namespace. */
+export function isNotFound(error: unknown): boolean {
+  return error !== null && typeof error === "object" && "code" in error &&
+    error.code === "ENOENT";
 }

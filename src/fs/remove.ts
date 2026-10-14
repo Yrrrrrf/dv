@@ -1,8 +1,10 @@
-import { runtime } from "./runtime/deno.ts";
+import process from "node:process";
+import { realpath, rm as remove } from "node:fs/promises";
+import { isNotFound } from "./paths.ts";
 import { discover } from "./discovery.ts";
 import { containedPath, relativePath, resolvePath, within } from "./paths.ts";
-import { write } from "./terminal.ts";
-import type { MatchMode } from "./types.ts";
+import { write } from "../terminal/io.ts";
+import type { MatchMode } from "../execution/types.ts";
 
 /** Removal always stays beneath an explicit root and never traverses symlinks. */
 export interface RemoveOptions {
@@ -38,7 +40,7 @@ export async function rm(
     throw new Error("rm requires at least one path or pattern");
   }
   const root = resolvePath(
-    await runtime.realPath(options.root ?? runtime.cwd()),
+    await realpath(options.root ?? process.cwd()),
   );
   const targets = await discover(patterns, {
     root,
@@ -76,11 +78,11 @@ export async function rm(
         );
       }
       if (!options.dryRun) {
-        await runtime.remove(path);
+        await remove(path, { recursive: true });
         result.removed.push(path);
       }
     } catch (error) {
-      if (!(runtime.notFound(error))) {
+      if (!(isNotFound(error))) {
         result.failures.push({ path, error: String(error) });
       }
     }

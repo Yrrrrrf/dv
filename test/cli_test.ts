@@ -1,7 +1,7 @@
 import { filePath, parseArgs } from "../src/mod.ts";
 import { equal, rejects } from "./assert.ts";
 
-const entry = filePath(new URL("../src/mod.ts", import.meta.url));
+const entry = filePath(new URL("../src/cli/bin.ts", import.meta.url));
 Deno.test("CLI separates its vector flags from untouched child arguments", () => {
   const parsed = parseArgs([
     "alpha",
@@ -95,5 +95,43 @@ Deno.test("pipeline CLI emits structured failures and preserves the failed child
     equal(json.tasks[1].status, "blocked");
   } finally {
     await Deno.remove(path);
+  }
+});
+
+Deno.test("removal uses the shared JSON grammar and keeps forwarded targets separate", async () => {
+  const root = await Deno.makeTempDir({ prefix: "dv-rm-cli-" });
+  try {
+    await Deno.mkdir(`${root}/build`);
+    const result = await new Deno.Command(Deno.execPath(), {
+      args: [
+        "run",
+        "-A",
+        entry,
+        "rm",
+        "alpha",
+        "-pv",
+        "--paths",
+        '["build"]',
+        "--root",
+        root,
+        "--dry-run",
+        "--json",
+      ],
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    equal(result.code, 0);
+    const removal = JSON.parse(new TextDecoder().decode(result.stdout));
+    equal(removal.paths, [`${root}/build`]);
+    equal(removal.dryRun, true);
+    equal((await Deno.stat(`${root}/build`)).isDirectory, true);
+    const legacy = await new Deno.Command(Deno.execPath(), {
+      args: ["run", "-A", entry, "rm", "--glob", "build"],
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    equal(legacy.code, 2);
+  } finally {
+    await Deno.remove(root, { recursive: true });
   }
 });

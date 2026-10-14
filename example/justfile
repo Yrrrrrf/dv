@@ -1,11 +1,11 @@
 # Independent Just + Nushell workflow. This never invokes pipeline.ts.
-# Deno runs the same src/mod.ts entrypoint exported by jsr:@yrrrrrf/dv.
+# Deno runs the same src/cli/bin.ts entrypoint exported by jsr:@yrrrrrf/dv/bin.
 set unstable
 set shell := ["nu", "-c"]
 set script-interpreter := ["nu"]
 set quiet
 
-CLI := "deno run -A ../src/mod.ts"
+CLI := "deno run -A ../src/cli/bin.ts"
 export DV_JUSTFILE := justfile()
 
 [default]
@@ -164,6 +164,8 @@ cycle *args:
             if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
         }
     }
+
+
 
 
 

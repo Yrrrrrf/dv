@@ -1,16 +1,13 @@
-import { runtime } from "./runtime/deno.ts";
+import { spawnProcess } from "../execution/process.ts";
 /** Transparent recipe dispatch: no interpolation, capture, or status normalization. */
 export async function launchRecipe(
   argv: readonly string[],
   options: { cwd: string; signal?: AbortSignal },
 ): Promise<number> {
   if (options.signal?.aborted) return 130;
-  const child = await runtime.spawn(argv[0]!, {
-    args: argv.slice(1),
+  const child = await spawnProcess(argv[0]!, argv.slice(1), {
     cwd: options.cwd,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdio: "inherit",
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {

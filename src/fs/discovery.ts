@@ -1,6 +1,8 @@
-import { runtime } from "./runtime/deno.ts";
+import process from "node:process";
+import { lstat, opendir, realpath } from "node:fs/promises";
+import { isNotFound } from "./paths.ts";
 import { basename, containedPath, relativePath, resolvePath } from "./paths.ts";
-import type { DiscoverOptions, Target } from "./types.ts";
+import type { DiscoverOptions, Target } from "../execution/types.ts";
 
 const ignored = new Set([
   ".git",
@@ -59,7 +61,7 @@ export async function discover(
   options: DiscoverOptions = {},
 ): Promise<Target[]> {
   const root = resolvePath(
-    await runtime.realPath(options.root ?? runtime.cwd()),
+    await realpath(options.root ?? process.cwd()),
   );
   const mode = options.mode ?? "glob";
   const kind = options.kind ?? "directory";
@@ -67,13 +69,13 @@ export async function discover(
   const excluded = (options.exclude ?? []).map(globRegex);
   const add = (
     path: string,
-    stat: { isDirectory: boolean; isFile: boolean; isSymlink: boolean },
+    stat: { isDirectory(): boolean; isFile(): boolean },
   ) => {
     const relative = relativePath(root, path);
     if (excluded.some((r) => r.test(relative))) return false;
     if (
-      kind === "any" || (kind === "directory" && stat.isDirectory) ||
-      (kind === "file" && stat.isFile)
+      kind === "any" || (kind === "directory" && stat.isDirectory()) ||
+      (kind === "file" && stat.isFile())
     ) {
       results.set(path, { path, relative, name: basename(path) });
       return true;
@@ -91,9 +93,9 @@ export async function discover(
       const path = resolvePath(pattern, root);
       try {
         await containedPath(root, path, kind === "any");
-        add(path, await runtime.lstat(path));
+        add(path, await lstat(path));
       } catch (error) {
-        if (!(options.allowMissing && runtime.notFound(error))) {
+        if (!(options.allowMissing && isNotFound(error))) {
           throw error;
         }
       }
@@ -104,14 +106,14 @@ export async function discover(
   }
   if (matchers.length) {
     const walk = async (directory: string): Promise<void> => {
-      for await (const entry of runtime.readDir(directory)) {
+      for await (const entry of await opendir(directory)) {
         const path = resolvePath(entry.name, directory);
         const relative = relativePath(root, path);
         if (excluded.some((r) => r.test(relative))) continue;
         const matched = matchers.some((r) => r.test(relative)) &&
           add(path, entry);
         if (
-          entry.isDirectory && !entry.isSymlink &&
+          entry.isDirectory() && !entry.isSymbolicLink() &&
           !(matched && options.pruneMatches) &&
           (options.includeIgnored || !ignored.has(entry.name))
         ) await walk(path);

@@ -6,7 +6,7 @@ import {
   recipesFromDump,
 } from "../src/mod.ts";
 import { splitArguments } from "../src/cli/args.ts";
-import { stripAnsi } from "../src/parsers.ts";
+import { stripAnsi } from "../src/execution/parsers.ts";
 import { assert, equal, rejects } from "./assert.ts";
 import { keyboard } from "./keyboard.ts";
 

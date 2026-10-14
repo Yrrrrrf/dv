@@ -1,5 +1,5 @@
 /** Test the actual tarball from a clean Node consumer outside the source tree. */
-import { filePath, resolvePath } from "../src/paths.ts";
+import { filePath, resolvePath } from "../src/fs/paths.ts";
 import { metadata, root } from "./version.ts";
 
 const node = Deno.env.get("DV_TEST_NODE") ?? "node";

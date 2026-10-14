@@ -1,7 +1,8 @@
-import { runtime } from "./runtime/deno.ts";
-import { discover, globRegex } from "./discovery.ts";
+import process from "node:process";
+import { realpath } from "node:fs/promises";
+import { discover, globRegex } from "../fs/discovery.ts";
 import { batch, selectTargets } from "./exec.ts";
-import { resolvePath } from "./paths.ts";
+import { resolvePath } from "../fs/paths.ts";
 import type { ExecOptions, ExecSpec, RunSummary } from "./types.ts";
 
 /** Inline package classification; argv remains an argument vector, never a shell string. */
@@ -35,7 +36,7 @@ export async function planMatrix(
     throw new Error("matrix match must be first or all");
   }
   const root = resolvePath(
-    await runtime.realPath(options.root ?? runtime.cwd()),
+    await realpath(options.root ?? process.cwd()),
   );
   const candidates: {
     rule: MatrixRule;

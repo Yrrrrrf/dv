@@ -6,10 +6,10 @@ reporting, with a generated ESM npm distribution for Node. MIT licensed. Deno
 2.9.5+ or Node 22+. No runtime dependencies or implicit project configuration
 file.
 
-This is the **0.0.5 source distribution**. The maintained source is published to
-JSR as `@yrrrrrf/dv`; `script/dnt.ts` generates the npm mirror with the same
+This is the **0.0.6 source distribution**. The maintained source is published to
+JSR as `@yrrrrrf/dv`; `scripts/dnt.ts` generates the npm mirror with the same
 package identity and public API. Registry examples apply after publication. This
-archive does not establish that either registry has published 0.0.5.
+archive does not establish that either registry has published 0.0.6.
 
 ## Build and use the Node distribution
 
@@ -17,19 +17,17 @@ Building requires Deno, Node and npm. Using the generated package requires only
 Node and the external tools explicitly requested by your recipes.
 
 ```sh
-deno run -A scripts/pipeline.ts build   # pinned dnt 0.44.0, output in npm/
-deno run -A scripts/pipeline.ts test:npm # build, pack, native Node tests and NodeNext types
-node npm/esm/cli/bin.js --version
-node npm/esm/cli/bin.js exec --json -- node -e 'console.log("hello")'
-node example/node-workspace.mjs list
-node example/node-workspace.mjs ci
-node example/node-workspace.mjs menu
+deno run -A scripts/pipeline.ts build   # pinned dnt 0.44.0, output in build/
+deno run -A scripts/test-npm.ts        # pack, native Node tests and NodeNext types
+node build/esm/src/cli/bin.js --version
+node build/esm/src/cli/bin.js exec --json -- node -e 'console.log("hello")'
 ```
 
-`test:npm` also leaves the actual npm archive in `dist/`. Install it locally:
+`scripts/test-npm.ts` also leaves the actual npm archive in `dist/`. Install it
+locally:
 
 ```sh
-npm install /absolute/path/to/dist/yrrrrrf-dv-0.0.5.tgz
+npm install /absolute/path/to/dist/yrrrrrf-dv-0.0.6.tgz
 npx dv --help
 ```
 
@@ -48,16 +46,16 @@ process.exitCode = await workspace.cli();
 
 The npm package is ESM with adjacent declarations and an installed `dv` binary.
 CommonJS `require()` is not an advertised entrypoint. Deno remains the
-maintained source; generated output is rebuilt rather than edited. A narrow dnt
-module mapping supplies Node built-ins for OS operations. There is no runtime
-Deno shim or execution-library dependency. See
-[the build guide](docs/NPM_BUILD.md).
+maintained source; generated output is rebuilt rather than edited. Both hosts
+use the same explicit `node:` built-ins and standard JavaScript. There is no
+runtime adapter mapping, Deno namespace shim, or execution-library dependency.
+See [the build guide](docs/NPM_BUILD.md).
 
 The host and child executable remain separate: a Node-hosted dv recipe invoking
 `deno test` still requires Deno. Existing Deno examples deliberately retain
-their Deno commands; `example/node-workspace.mjs` demonstrates a Node-only
-workspace. Importing the generated package starts no process, attaches no
-input/signal listeners, and reads no project configuration.
+their Deno commands. The installed-consumer example above uses Node commands.
+Importing the generated package starts no process, attaches no input/signal
+listeners, and reads no project configuration.
 
 ## Two independent Deno consumers
 
@@ -66,9 +64,9 @@ input/signal listeners, and reads no project configuration.
 Just + Nushell and dv's CLI. Neither example executes or imports the other.
 There is no shared workflow declaration hidden in another file.
 
-The Just example calls `deno run -A ../src/mod.ts`: the exact module exported by
-the package's `.` entrypoint. After publication, that becomes
-`deno run -A jsr:@yrrrrrf/dv`.
+The Just example calls the explicit executable `deno run -A ../src/cli/bin.ts`.
+After publication, that becomes `deno run -A jsr:@yrrrrrf/dv/bin`. The root `.`
+and `./cli` exports are importable library modules.
 
 From the package directory:
 
@@ -119,7 +117,7 @@ just --justfile example/justfile menu
 For your own `workspace.ts`, keep the recipes in that workspace:
 
 ```ts
-import { createPipeline } from "jsr:@yrrrrrf/dv@0.0.5";
+import { createPipeline } from "jsr:@yrrrrrf/dv@0.0.6";
 
 const workspace = createPipeline({
   test: {
@@ -259,14 +257,14 @@ For persistent, interactive servers like `run` (`vite dev`, `deno run`) or
 ## Commands and API
 
 ```sh
-deno run -A src/mod.ts exec --title TYPES --cwd 'apps/*' -- deno check mod.ts
-deno run -A src/mod.ts exec alpha --select one --cwd 'apps/*' -- deno run mod.ts
-deno run -A src/mod.ts batch --title CHECK --specs '[
+deno run -A src/cli/bin.ts exec --title TYPES --cwd 'apps/*' -- deno check mod.ts
+deno run -A src/cli/bin.ts exec alpha --select one --cwd 'apps/*' -- deno run mod.ts
+deno run -A src/cli/bin.ts batch --title CHECK --specs '[
   {"command":["deno","fmt","--check","src"]},
   {"command":["deno","lint","src"]}
 ]' -p
-deno run -A src/mod.ts rm --paths '["build","coverage"]' --dry-run
-deno run -A src/mod.ts --help
+deno run -A src/cli/bin.ts rm --paths '["build","coverage"]' --dry-run
+deno run -A src/cli/bin.ts --help
 ```
 
 ```ts
@@ -289,9 +287,9 @@ await rm(["build", "coverage"], { dryRun: true });
 `exec()` / `batch()` accept argv vectors. Shell evaluation only occurs when the
 caller explicitly invokes a shell. Arguments after CLI `--` remain intact except
 for explicit `{root}`, `{cwd}`, `{name}`, and standalone `{files}` substitution.
-Under a Deno host, the first executable `deno` resolves to the running
-`Deno.execPath()`. Under Node, an explicit `deno` stays `deno` and is resolved
-through the normal executable search.
+dv passes the declared executable to the host without substituting the current
+runtime. Use an explicit executable path when a recipe requires a particular
+installation; otherwise executable lookup follows the host environment.
 
 Directory/file flags are vectors: `--cwd`, `--files`, `--exclude`. Put a
 positional target before vectors. Repeat flags to extend a vector, or use
@@ -347,7 +345,7 @@ let rules = [
     {packages: 'apps/*', pattern: 'apps/*/src/App.tsx', engine: tsc,
      cwd: '{root}', command: [deno run -A 'npm:typescript@6/tsc' -p '{package}/tsconfig.json' --noEmit]}
 ]
-^deno run -A ../src/mod.ts matrix --title TYPES --rules ($rules | to json --raw) -p
+^deno run -A ../src/cli/bin.ts matrix --title TYPES --rules ($rules | to json --raw) -p
 ```
 
 Rule fields: `packages`, `pattern`, `command`, optional `id`, `cwd`, `group`,
@@ -391,7 +389,7 @@ await exec(["deno", "check", "mod.ts"], {
 ```
 
 ```sh
-deno run -A src/mod.ts exec --cwd 'apps/*' \
+deno run -A src/cli/bin.ts exec --cwd 'apps/*' \
   --before '[{"command":["deno","install"]}]' -- deno check mod.ts
 ```
 
@@ -473,9 +471,9 @@ removals, rejects the project root, and refuses symlink ancestor traversal. A
 final symlink can be unlinked without traversing it. CLI forms:
 
 ```sh
-deno run -A src/mod.ts rm --glob '**/node_modules' build dist --dry-run
-deno run -A src/mod.ts rm --regex '^apps/[^/]+/coverage$'
-deno run -A src/mod.ts rm --paths '["build","coverage"]' --dry-run --json
+deno run -A src/cli/bin.ts rm --mode glob --paths '["**/node_modules","build","dist"]' --dry-run
+deno run -A src/cli/bin.ts rm --mode regex --paths '["^apps/[^/]+/coverage$"]'
+deno run -A src/cli/bin.ts rm --paths '["build","coverage"]' --dry-run --json
 ```
 
 The `--paths` form accepts shared workflow flags, so forwarded targets cannot
@@ -538,16 +536,14 @@ DV_TEST_JUST=/absolute/path/to/just DV_TEST_NU=/absolute/path/to/nu deno run -A 
 deno publish --dry-run
 ```
 
-Optional POSIX terminal integration tests use only Python's standard library:
+The packed-consumer check also supports real POSIX terminal validation:
 
 ```sh
-DV_TEST_DENO=/absolute/path/to/deno DV_TEST_JUST=/absolute/path/to/just \
-  python3 test/pty_menu_test.py
+DV_TEST_PTY=1 deno run -A scripts/test-npm.ts
 ```
 
-These launch a real `workspace.ts` without a justfile, exercise Just dispatch,
-compare default and literal arguments, check native colors/TTY attachment,
-preserve failures, and verify terminal-mode restoration on cancellation.
+This verifies prompt cancellation and reuse, clean process exit, and restoration
+of the terminal's original input mode. Python's standard library is sufficient.
 
 Tests cover process cleanup, bounded concurrency/capture, argv preservation,
 selection, removal, parsers, grouped/TTY reporting, matrix ownership,
@@ -556,5 +552,6 @@ Just/Nushell integration is optional for developers who only have Deno.
 
 The maintained implementation is under `src/`, build scripts under `scripts/`,
 tests under `test/`, and examples under `example/`. Public modules are
-`src/mod.ts` (`.`) and `src/cli/mod.ts` (`./cli`). Publishing is a separate
+`src/mod.ts` (`.`) and `src/cli/mod.ts` (`./cli`), with executable startup in
+`src/cli/bin.ts` (`./bin` in JSR and `dv` in npm). Publishing is a separate
 explicit operation. See `CHANGELOG.md` for migration notes.

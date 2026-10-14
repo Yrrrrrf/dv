@@ -1,13 +1,14 @@
-import { runtime } from "./runtime/deno.ts";
-import { discover } from "./discovery.ts";
+import { commandOutput } from "../execution/process.ts";
+import { discover } from "../fs/discovery.ts";
 import { launchRecipe } from "./launch.ts";
-import { resolvePath } from "./paths.ts";
-import { formatRecipes } from "./recipes.ts";
-import { quoteArgument, readInput } from "./terminal.ts";
-import { chooseRecipe } from "./menu.ts";
-import { requireInteractive } from "./prompts.ts";
-import { splitArguments } from "./cli/args.ts";
-import type { RecipeInfo } from "./recipes.ts";
+import { resolvePath } from "../fs/paths.ts";
+import { formatRecipes } from "../terminal/recipes.ts";
+import { quoteArgument } from "../terminal/format.ts";
+import { readInput } from "../terminal/prompts.ts";
+import { chooseRecipe } from "../terminal/menu.ts";
+import { requireInteractive } from "../terminal/prompts.ts";
+import { splitArguments } from "../cli/args.ts";
+import type { RecipeInfo } from "../terminal/recipes.ts";
 
 /** Minimal recipe parameter metadata supplied by Just. */
 export interface JustParameter {
@@ -135,18 +136,13 @@ function readRecipes(dump: unknown, prefix: string): JustRecipe[] {
 
 /** Inspect an optional Just dependency only when the caller requests Just integration. */
 export async function readJust(justfile: string): Promise<JustRecipe[]> {
-  const output = await runtime.output("just", {
-    args: [
-      "--justfile",
-      resolvePath(justfile),
-      "--dump",
-      "--dump-format",
-      "json",
-    ],
-    stdin: "null",
-    stdout: "piped",
-    stderr: "piped",
-  });
+  const output = await commandOutput("just", [
+    "--justfile",
+    resolvePath(justfile),
+    "--dump",
+    "--dump-format",
+    "json",
+  ]);
   if (!output.success) {
     throw new Error(
       new TextDecoder().decode(output.stderr) ||

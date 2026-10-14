@@ -1,6 +1,5 @@
-import { runtime } from "./runtime/deno.ts";
 /**
- * Deno-native command execution and workflow composition.
+ * Command execution and workflow composition.
  *
  * @example
  * ```ts
@@ -8,14 +7,14 @@ import { runtime } from "./runtime/deno.ts";
  * await exec(["deno", "check", "mod.ts"], { cwd: ["apps/*"], parallel: true });
  * ```
  *
- * Run this module directly for the CLI. Importing it never starts a process,
+ * Run the ./bin entrypoint for the CLI. Importing this module never starts a process,
  * reads a project config, installs signal handlers, or requires Just.
  * @module
  */
-export { batch, exec, ExecutionError, plan } from "./exec.ts";
-export { discover, globRegex } from "./discovery.ts";
-export { RemovalError, rm } from "./remove.ts";
-export type { RemovalResult, RemoveOptions } from "./remove.ts";
+export { batch, exec, ExecutionError, plan } from "./execution/exec.ts";
+export { discover, globRegex } from "./fs/discovery.ts";
+export { RemovalError, rm } from "./fs/remove.ts";
+export type { RemovalResult, RemoveOptions } from "./fs/remove.ts";
 export { createPipeline, formatRecipes, PipelineError } from "./pipeline.ts";
 export type {
   Pipeline,
@@ -27,29 +26,33 @@ export type {
   TaskContext,
   TaskResult,
 } from "./pipeline.ts";
-export { builtInParsers, resolveParser, stripAnsi } from "./parsers.ts";
 export {
-  banner,
-  choose,
-  createReporter,
-  formatCommand,
-  isInteractive,
-  quoteArgument,
-  readInput,
-} from "./terminal.ts";
-export type { Choice, InputOptions, PromptOptions } from "./terminal.ts";
-export { filePath } from "./paths.ts";
-export { listJust, menuJust, readJust, recipesFromDump } from "./just.ts";
-export type { JustMenuOptions, JustParameter, JustRecipe } from "./just.ts";
+  builtInParsers,
+  resolveParser,
+  stripAnsi,
+} from "./execution/parsers.ts";
+export { banner, formatCommand, quoteArgument } from "./terminal/format.ts";
+export { isInteractive } from "./terminal/io.ts";
+export { choose, readInput } from "./terminal/prompts.ts";
+export type {
+  Choice,
+  InputOptions,
+  PromptOptions,
+} from "./terminal/prompts.ts";
+export { createReporter } from "./terminal/reporting.ts";
+export { filePath } from "./fs/paths.ts";
+export { listJust, menuJust, readJust, recipesFromDump } from "./just/mod.ts";
+export type { JustMenuOptions, JustParameter, JustRecipe } from "./just/mod.ts";
 export { parseArgs } from "./cli/args.ts";
 export { main, VERSION } from "./cli/mod.ts";
-export type * from "./types.ts";
+export type * from "./execution/types.ts";
 
-import { main } from "./cli/mod.ts";
-if (runtime.isMain(import.meta)) runtime.exit(await main());
+export { matrix, planMatrix } from "./execution/matrix.ts";
+export type { MatrixOptions, MatrixRule } from "./execution/matrix.ts";
+export {
+  conciseCommand,
+  formatDuration,
+  resultBadge,
+} from "./terminal/reporting.ts";
 
-export { matrix, planMatrix } from "./matrix.ts";
-export type { MatrixOptions, MatrixRule } from "./matrix.ts";
-export { conciseCommand, formatDuration, resultBadge } from "./reporting.ts";
-
-export { chooseRecipe } from "./menu.ts";
+export { chooseRecipe } from "./terminal/menu.ts";

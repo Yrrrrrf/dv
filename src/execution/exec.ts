@@ -1,19 +1,15 @@
-import type {
-  ChildProcess,
-  ProcessSignal,
-  ProcessStatus,
-} from "./runtime/types.ts";
-import { runtime } from "./runtime/deno.ts";
-import { childEnvironment } from "./style.ts";
-import { discover } from "./discovery.ts";
-import { resolvePath } from "./paths.ts";
+import { spawnProcess } from "./process.ts";
+import process from "node:process";
+import { realpath } from "node:fs/promises";
+import { availableParallelism } from "node:os";
+import type { ChildProcess, ProcessSignal, ProcessStatus } from "./process.ts";
+import { childEnvironment } from "../terminal/style.ts";
+import { discover } from "../fs/discovery.ts";
+import { resolvePath } from "../fs/paths.ts";
 import { resolveParser } from "./parsers.ts";
-import {
-  choose,
-  createReporter,
-  isInteractive,
-  isRawExecution,
-} from "./terminal.ts";
+import { choose } from "../terminal/prompts.ts";
+import { createReporter, isRawExecution } from "../terminal/reporting.ts";
+import { isInteractive } from "../terminal/io.ts";
 import type {
   CommandResult,
   ExecOptions,
@@ -142,7 +138,7 @@ async function jobsFor(spec: ExecSpec, defaults: ExecOptions): Promise<Job[]> {
     ) throw new Error(`Invalid environment override: ${key}`);
   }
   const root = resolvePath(
-    await runtime.realPath(options.root ?? runtime.cwd()),
+    await realpath(options.root ?? process.cwd()),
   );
   const patterns = typeof options.cwd === "string"
     ? [options.cwd]
@@ -184,8 +180,6 @@ async function jobsFor(spec: ExecSpec, defaults: ExecOptions): Promise<Job[]> {
     const command = spec.command.flatMap((arg) =>
       arg === "{files}" ? files.map((f) => f.path) : [expand(arg)]
     );
-    // Resolve the current Deno only in the native adapter; Node keeps explicit tools.
-    command[0] = runtime.executable(command[0]!);
     const parser = resolveParser(command, options.parser, options.parsers);
     return {
       options,
@@ -257,15 +251,16 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
   const stdinMode = isRaw ? "inherit" : (options.stdin ?? "null");
   const stdoutMode = isRaw ? "inherit" : "piped";
   const stderrMode = isRaw ? "inherit" : "piped";
-  const grouped = runtime.os !== "windows" && stdinMode !== "inherit";
+  const grouped = process.platform !== "win32" && stdinMode !== "inherit";
   try {
-    child = await runtime.spawn(plan.command[0]!, {
-      args: plan.command.slice(1),
+    child = await spawnProcess(plan.command[0]!, plan.command.slice(1), {
       cwd: plan.cwd,
       env: isRaw ? plan.env : childEnvironment(plan.env),
-      stdin: stdinMode,
-      stdout: stdoutMode,
-      stderr: stderrMode,
+      stdio: [
+        stdinMode === "null" ? "ignore" : stdinMode,
+        stdoutMode === "piped" ? "pipe" : stdoutMode,
+        stderrMode === "piped" ? "pipe" : stderrMode,
+      ],
       detached: grouped,
     });
   } catch (error) {
@@ -282,25 +277,22 @@ async function execute(job: Job, report: Reporter): Promise<CommandResult> {
   let hardKill: ReturnType<typeof setTimeout> | undefined;
   const treeKills: Promise<unknown>[] = [];
   const kill = (signal: ProcessSignal) => {
-    if (runtime.os === "windows") {
+    if (process.platform === "win32") {
       const fallback = () => {
         try {
           child.kill();
         } catch { /* already exited */ }
       };
       treeKills.push(
-        runtime.spawn("taskkill", {
-          args: ["/PID", String(child.pid), "/T", "/F"],
-          stdin: "null",
-          stdout: "null",
-          stderr: "null",
+        spawnProcess("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+          stdio: "ignore",
         }).then((killer) => killer.status).then((status) => {
           if (!status.success) fallback();
         }).catch(fallback),
       );
     } else {
       try {
-        if (grouped) runtime.kill(-child.pid, signal);
+        if (grouped) process.kill(-child.pid, signal);
         else child.kill(signal);
       } catch { /* already exited */ }
     }
@@ -477,7 +469,7 @@ export async function batch(
   const isRaw = isRawExecution(options);
   const report = options.reporter ?? createReporter(options);
   const slots = options.parallel
-    ? options.jobs ?? Math.max(1, Math.min(8, runtime.hardwareConcurrency()))
+    ? options.jobs ?? Math.max(1, Math.min(8, availableParallelism()))
     : 1;
   if (
     (options.stdin === "inherit" || isRaw ||

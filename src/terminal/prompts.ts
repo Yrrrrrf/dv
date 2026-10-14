@@ -1,5 +1,7 @@
-import { runtime } from "./runtime/deno.ts";
-import { isInteractive, write } from "./terminal.ts";
+import process from "node:process";
+import { readBytes, releaseInput, setRaw } from "./input.ts";
+import { terminalSize } from "./io.ts";
+import { isInteractive, write } from "./io.ts";
 import {
   clip,
   color,
@@ -92,7 +94,7 @@ async function readChunk(
   if (signal?.aborted) throw cancelled();
   pendingRead ??= (async () => {
     const buffer = new Uint8Array(4096);
-    const count = await runtime.stdin.read(buffer);
+    const count = await readBytes(buffer);
     return count === null
       ? null
       : decoder.decode(buffer.subarray(0, count), { stream: true });
@@ -158,7 +160,7 @@ async function promptEditor(
   const render = () => {
     let columns = 100, rows = 24;
     try {
-      ({ columns, rows } = runtime.consoleSize());
+      ({ columns, rows } = terminalSize());
     } catch { /* fallback */ }
     columns = Math.max(1, columns - 1);
     rows = Math.max(2, rows - 1);
@@ -265,12 +267,12 @@ async function promptEditor(
     error = "";
   };
   let result: string | undefined;
-  runtime.stdin.setRaw(true);
+  setRaw(true);
   const resize = () => render();
   let resizing = false;
   try {
     try {
-      runtime.addSignalListener("SIGWINCH", resize);
+      process.on("SIGWINCH", resize);
       resizing = true;
     } catch { /* unsupported */ }
     write("\x1b[?2004h");
@@ -362,18 +364,17 @@ async function promptEditor(
     }
     return result;
   } finally {
-    if (resizing) runtime.removeSignalListener("SIGWINCH", resize);
+    if (resizing) process.off("SIGWINCH", resize);
     try {
       clear();
       write("\x1b[?2004l");
     } finally {
       try {
-        runtime.stdin.setRaw(false);
+        setRaw(false);
       } finally {
-        if (runtime.releaseInput()) {
-          pendingRead = undefined;
-          decoder.decode(); // Discard a cancelled Node prompt's partial UTF-8.
-        }
+        releaseInput();
+        pendingRead = undefined;
+        decoder.decode(); // Discard a cancelled prompt's partial UTF-8.
       }
     }
     if (result !== undefined) {

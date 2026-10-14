@@ -1,4 +1,4 @@
-import type { ExecOptions, ExecSpec } from "../types.ts";
+import type { ExecOptions, ExecSpec } from "../execution/types.ts";
 
 /** Parsed execution options; command is empty when parsing pipeline arguments. */
 export interface ParsedArguments {
@@ -6,7 +6,7 @@ export interface ParsedArguments {
   command: string[];
   json: boolean;
   help: boolean;
-  rules?: import("../matrix.ts").MatrixRule[];
+  rules?: import("../execution/matrix.ts").MatrixRule[];
   specs?: ExecSpec[];
   paths?: string[];
   match?: "first" | "all";

@@ -5,20 +5,15 @@ A critical design document examining the architectural tensions in
 layers, known ecosystem friction points, and future patterns for managing
 complex poly-runner environments without compromising core design principles.
 
-Version note: v0.0.5 retains these general-purpose boundaries and adds a dnt npm
-mirror. Native Deno OS calls now live in `src/runtime/deno.ts`; dnt maps them to
-Node built-ins in `src/runtime/node.ts`. The proposals below remain proposals,
-and no framework compatibility helpers were added in this release.
-
----
+## Version note: v0.0.6 keeps these general-purpose boundaries while removing the separate Deno/Node backends. Shared built-ins implement OS operations; `src/execution/`, `src/fs/`, `src/terminal/`, and `src/cli/` own their respective concerns. The proposals below remain proposals.
 
 ## 1. The Core Dilemma: Generic Engine vs. Real-World Friction
 
 `@yrrrrrf/dv` was designed around a strict, Unix-inspired thesis: **Commands,
 composed.**
 
-- **Zero runtime dependencies**: Native Deno primitives and a generated Node
-  adapter using built-ins. dnt is build tooling.
+- **Zero runtime dependencies**: Shared built-ins across both hosts. dnt is
+  build tooling.
 - **No implicit configuration**: No magic `.dvrc`, implicit project scans, or
   hidden defaults.
 - **Argv preservation**: Raw vector execution (`string[]`), avoiding shell
@@ -244,9 +239,7 @@ following nuances and sharp edges were identified:
 
 ### 2. Invocation & Parser Detection Heuristics
 
-- In
-  [`src/parsers.ts`](file:///home/yrrrrrf/Documents/lab/code/typescript/dv/src/parsers.ts#L17),
-  `invocation()` unwraps:
+- In `src/execution/parsers.ts`, `invocation()` unwraps:
   ```ts
   deno [flags] run [flags] npm:vue-tsc@3.3.11 -> "vue-tsc"
   ```
@@ -258,10 +251,9 @@ following nuances and sharp edges were identified:
 
 ### 3. Stream Truncation & Diagnostic Blindness
 
-- In
-  [`src/exec.ts`](file:///home/yrrrrrf/Documents/lab/code/typescript/dv/src/exec.ts#L320),
-  output exceeding `maxOutputBytes` (default 2 MiB) truncates by preserving the
-  head and tail, and **disables diagnostic parsers**.
+- In `src/execution/exec.ts`, output exceeding `maxOutputBytes` (default 2 MiB)
+  truncates by preserving the head and tail, and **disables diagnostic
+  parsers**.
 - **The rationale**: If output is truncated, error/warning regex counts are
   provably incomplete and would report false passes.
 - **The consequence**: A build producing 3 MiB of logs with 1 error in the
@@ -270,7 +262,7 @@ following nuances and sharp edges were identified:
 
 ### 4. Process Group Signaling Across Environments
 
-- POSIX process detachment (`detached: true`, `Deno.kill(-pid)`) is highly
+- POSIX process detachment (`detached: true`, `process.kill(-pid)`) is highly
   reliable on native Linux and macOS.
 - **The trap**: Inside certain container runtimes (e.g., minimal Docker
   containers without an init process PID 1, or weird subshell nestings), killing

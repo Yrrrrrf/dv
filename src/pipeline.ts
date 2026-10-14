@@ -1,20 +1,25 @@
-import { runtime } from "./runtime/deno.ts";
-import { batch, exec, ExecutionError } from "./exec.ts";
-import { RemovalError, rm } from "./remove.ts";
-import { matrix } from "./matrix.ts";
-import type { MatrixOptions, MatrixRule } from "./matrix.ts";
-import { formatDuration, plain } from "./reporting.ts";
-import { readInput, write } from "./terminal.ts";
-import { requireInteractive } from "./prompts.ts";
-import { chooseRecipe, chooseTarget, workflowSuggestions } from "./menu.ts";
-import { formatRecipes } from "./recipes.ts";
-import type { RecipeInfo } from "./recipes.ts";
-export { formatRecipes } from "./recipes.ts";
-export type { RecipeInfo } from "./recipes.ts";
+import process from "node:process";
+import { batch, exec, ExecutionError } from "./execution/exec.ts";
+import { RemovalError, rm } from "./fs/remove.ts";
+import { matrix } from "./execution/matrix.ts";
+import type { MatrixOptions, MatrixRule } from "./execution/matrix.ts";
+import { formatDuration, plain } from "./terminal/reporting.ts";
+import { readInput } from "./terminal/prompts.ts";
+import { write } from "./terminal/io.ts";
+import { requireInteractive } from "./terminal/prompts.ts";
+import {
+  chooseRecipe,
+  chooseTarget,
+  workflowSuggestions,
+} from "./terminal/menu.ts";
+import { formatRecipes } from "./terminal/recipes.ts";
+import type { RecipeInfo } from "./terminal/recipes.ts";
+export { formatRecipes } from "./terminal/recipes.ts";
+export type { RecipeInfo } from "./terminal/recipes.ts";
 import { parseArgs, splitArguments } from "./cli/args.ts";
-import { withSignals } from "./signals.ts";
-import type { ExecOptions, ExecSpec, RunSummary } from "./types.ts";
-import type { RemovalResult, RemoveOptions } from "./remove.ts";
+import { withSignals } from "./cli/signals.ts";
+import type { ExecOptions, ExecSpec, RunSummary } from "./execution/types.ts";
+import type { RemovalResult, RemoveOptions } from "./fs/remove.ts";
 
 /** Bound helpers passed to a TypeScript task. */
 export interface TaskContext {
@@ -349,7 +354,7 @@ export function createPipeline(
       }
       return await pipeline.run(name, execution);
     },
-    async cli(args = runtime.args) {
+    async cli(args = process.argv.slice(2)) {
       let json = false;
       try {
         const name = args[0] ?? "list";

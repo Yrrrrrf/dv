@@ -1,16 +1,17 @@
-/** Synchronize the literal runtime version without shipping a config-file read. */
+/** Validate the package metadata used by the existing version pipeline step. */
+import value from "../deno.json" with { type: "json" };
 export const root = new URL("../", import.meta.url);
-export async function metadata(): Promise<
-  {
-    name: string;
-    version: string;
-    description: string;
-    license: string;
-    author: string;
-  }
-> {
-  const value = JSON.parse(await Deno.readTextFile(new URL("deno.json", root)));
-  for (const key of ["name", "version", "description", "license", "author"]) {
+
+export function metadata() {
+  for (
+    const key of [
+      "name",
+      "version",
+      "description",
+      "license",
+      "author",
+    ] as const
+  ) {
     if (typeof value[key] !== "string" || !value[key]) {
       throw new Error(`Missing package metadata: ${key}`);
     }
@@ -24,20 +25,4 @@ export async function metadata(): Promise<
   };
 }
 
-export async function synchronizeVersion(check = false): Promise<void> {
-  const { version } = await metadata();
-  const path = new URL("src/version.ts", root);
-  const expected =
-    `/** Generated from deno.json by scripts/version.ts; no runtime metadata reads. */\nexport const VERSION = ${
-      JSON.stringify(version)
-    };\n`;
-  if (check) {
-    if (await Deno.readTextFile(path) !== expected) {
-      throw new Error("Version is stale: run scripts/pipeline.ts version");
-    }
-  } else {
-    await Deno.writeTextFile(path, expected);
-  }
-}
-
-if (import.meta.main) await synchronizeVersion(Deno.args.includes("--check"));
+if (import.meta.main) metadata();

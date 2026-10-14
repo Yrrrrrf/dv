@@ -1,15 +1,18 @@
-import { runtime } from "./runtime/deno.ts";
+import process from "node:process";
+import { environment } from "./style.ts";
+import { terminalSize } from "./io.ts";
 import type {
   CommandResult,
   ExecOptions,
   PlannedCommand,
   Reporter,
-} from "./types.ts";
-import { resolvePath } from "./paths.ts";
-import { stripAnsi } from "./parsers.ts";
+} from "../execution/types.ts";
+import { resolvePath } from "../fs/paths.ts";
+import { stripAnsi } from "../execution/parsers.ts";
 import { clip, displayWidth, plain, sanitize, supportsColor } from "./style.ts";
 export { displayWidth, plain } from "./style.ts";
-import { color, formatCommand, quoteArgument, write } from "./terminal.ts";
+import { color, formatCommand, quoteArgument } from "./format.ts";
+import { write } from "./io.ts";
 
 /** Compact timing shared by suites and pipelines. */
 export function formatDuration(ms: number): string {
@@ -111,24 +114,11 @@ function rowsText(
   ]);
 }
 
-function terminalSize(): { columns: number; rows: number } {
-  try {
-    return runtime.consoleSize();
-  } catch {
-    return { columns: 100, rows: 24 };
-  }
-}
-function env(name: string): string | undefined {
-  try {
-    return runtime.env(name);
-  } catch {
-    return undefined;
-  }
-}
-
 /** OSC 8 links for common diagnostic file:line:column forms, relative to the child cwd. */
 export function linkifyDiagnostics(text: string, cwd: string): string {
-  if (!runtime.stderr.isTerminal() || env("TERM") === "dumb") return text;
+  if (process.stderr.isTTY !== true || environment("TERM") === "dumb") {
+    return text;
+  }
   return text.replace(
     /((?:[A-Za-z]:)?[\w./\\-]+\.(?:tsx?|jsx?|svelte|vue)):(\d+)(?::(\d+))?/g,
     (display, path: string, line: string, column: string | undefined) => {
@@ -196,7 +186,7 @@ export function createReporter(options: ExecOptions = {}): Reporter {
     write(lines.join("\n") + "\n");
     height = lines.length;
   };
-  const block = (heading: string, lines: string[], cwd = runtime.cwd()) => {
+  const block = (heading: string, lines: string[], cwd = process.cwd()) => {
     if (!lines.length) return;
     clear();
     write(
@@ -253,9 +243,9 @@ export function createReporter(options: ExecOptions = {}): Reporter {
       const size = terminalSize();
       live = !event.dryRun && options.report !== "plain" &&
         options.report !== "stream" &&
-        runtime.stderr.isTerminal() &&
-        !["true", "1"].includes(env("CI") ?? "") &&
-        env("TERM") !== "dumb" &&
+        process.stderr.isTTY === true &&
+        !["true", "1"].includes(environment("CI") ?? "") &&
+        environment("TERM") !== "dumb" &&
         rowsText(rows, "", size.columns).length + 3 < size.rows - 2;
       if (live) {
         write("\x1b[?25l");

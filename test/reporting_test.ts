@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import process from "node:process";
 import { createReporter } from "../src/mod.ts";
 import { assert, equal } from "./assert.ts";
 import type { CommandResult, PlannedCommand, RunSummary } from "../src/mod.ts";
@@ -39,12 +41,12 @@ function summary(
 }
 
 Deno.test("plain grouped output is ordered and exposes successful warnings without exact paths", () => {
-  const saved = Deno.stderr.writeSync;
+  const saved = fs.writeSync;
   let output = "";
-  Deno.stderr.writeSync = (bytes) => {
+  fs.writeSync = ((_fd: number, bytes: Uint8Array) => {
     output += new TextDecoder().decode(bytes);
     return bytes.length;
-  };
+  }) as typeof fs.writeSync;
   try {
     const report = createReporter({ report: "plain" });
     const a = result("alpha"), b = result("beta");
@@ -61,26 +63,34 @@ Deno.test("plain grouped output is ordered and exposes successful warnings witho
     assert(!output.includes("0 errors"));
     assert(!output.includes("(cd "));
   } finally {
-    Deno.stderr.writeSync = saved;
+    fs.writeSync = saved;
   }
 });
 
 Deno.test("live reporter restores cursor and stops timers on close, dry-run uses no animation", () => {
   const saved = {
-    write: Deno.stderr.writeSync,
-    terminal: Deno.stderr.isTerminal,
-    size: Deno.consoleSize,
+    write: fs.writeSync,
+    terminal: process.stderr.isTTY,
+    columns: Object.getOwnPropertyDescriptor(process.stderr, "columns"),
+    rows: Object.getOwnPropertyDescriptor(process.stderr, "rows"),
   };
   let output = "";
   const oldCI = Deno.env.get("CI"), oldTerm = Deno.env.get("TERM");
   Deno.env.delete("CI");
   Deno.env.set("TERM", "xterm");
-  Deno.stderr.writeSync = (b) => {
+  fs.writeSync = ((_fd: number, b: Uint8Array) => {
     output += new TextDecoder().decode(b);
     return b.length;
-  };
-  Deno.stderr.isTerminal = () => true;
-  Deno.consoleSize = () => ({ columns: 100, rows: 40 });
+  }) as typeof fs.writeSync;
+  process.stderr.isTTY = true;
+  Object.defineProperty(process.stderr, "columns", {
+    value: 100,
+    configurable: true,
+  });
+  Object.defineProperty(process.stderr, "rows", {
+    value: 40,
+    configurable: true,
+  });
   try {
     const report = createReporter();
     const a = result("alpha");
@@ -94,9 +104,13 @@ Deno.test("live reporter restores cursor and stops timers on close, dry-run uses
     report({ type: "close" });
     equal(output.includes("\x1b[?25l"), false);
   } finally {
-    Deno.stderr.writeSync = saved.write;
-    Deno.stderr.isTerminal = saved.terminal;
-    Deno.consoleSize = saved.size;
+    fs.writeSync = saved.write;
+    process.stderr.isTTY = saved.terminal;
+    for (const key of ["columns", "rows"] as const) {
+      const descriptor = saved[key];
+      if (descriptor) Object.defineProperty(process.stderr, key, descriptor);
+      else Reflect.deleteProperty(process.stderr, key);
+    }
     if (oldCI === undefined) Deno.env.delete("CI");
     else Deno.env.set("CI", oldCI);
     if (oldTerm === undefined) Deno.env.delete("TERM");
@@ -104,12 +118,12 @@ Deno.test("live reporter restores cursor and stops timers on close, dry-run uses
   }
 });
 Deno.test("per-command verbose reporting remains available inside a grouped batch", () => {
-  const saved = Deno.stderr.writeSync;
+  const saved = fs.writeSync;
   let output = "";
-  Deno.stderr.writeSync = (b) => {
+  fs.writeSync = ((_fd: number, b: Uint8Array) => {
     output += new TextDecoder().decode(b);
     return b.length;
-  };
+  }) as typeof fs.writeSync;
   try {
     const report = createReporter({ report: "plain" });
     const r = result("alpha");
@@ -121,6 +135,6 @@ Deno.test("per-command verbose reporting remains available inside a grouped batc
     report({ type: "close" });
     assert(output.includes("command-specific detail"));
   } finally {
-    Deno.stderr.writeSync = saved;
+    fs.writeSync = saved;
   }
 });

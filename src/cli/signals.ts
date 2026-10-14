@@ -1,5 +1,5 @@
-import type { ProcessSignal } from "./runtime/types.ts";
-import { runtime } from "./runtime/deno.ts";
+import process from "node:process";
+import type { ProcessSignal } from "../execution/process.ts";
 /** Install cancellation handlers for a CLI lifetime; library calls accept caller signals. */
 export async function withSignals<T>(
   run: (signal: AbortSignal) => Promise<T>,
@@ -9,7 +9,7 @@ export async function withSignals<T>(
   const installed: ProcessSignal[] = [];
   for (const signal of ["SIGINT", "SIGTERM"] as ProcessSignal[]) {
     try {
-      runtime.addSignalListener(signal, listener);
+      process.on(signal, listener);
       installed.push(signal);
     } catch { /* unsupported OS signal */ }
   }
@@ -17,7 +17,7 @@ export async function withSignals<T>(
     return await run(controller.signal);
   } finally {
     for (const signal of installed) {
-      runtime.removeSignalListener(signal, listener);
+      process.off(signal, listener);
     }
   }
 }

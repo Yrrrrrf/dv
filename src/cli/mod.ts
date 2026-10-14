@@ -1,16 +1,16 @@
-import { runtime } from "../runtime/deno.ts";
+import process from "node:process";
 /** Command-line frontend for @yrrrrrf/dv. Importing it performs no work. */
-import { batch, exec, ExecutionError } from "../exec.ts";
-import { matrix } from "../matrix.ts";
-import { RemovalError, rm } from "../remove.ts";
-import { banner, write } from "../terminal.ts";
+import { batch, exec, ExecutionError } from "../execution/exec.ts";
+import { matrix } from "../execution/matrix.ts";
+import { RemovalError, rm } from "../fs/remove.ts";
+import { banner } from "../terminal/format.ts";
+import { write } from "../terminal/io.ts";
 import { parseArgs } from "./args.ts";
-import { withSignals } from "../signals.ts";
-import type { RemoveOptions } from "../remove.ts";
+import { withSignals } from "./signals.ts";
 
 /** Package version, shared by the CLI and public API. */
-export { VERSION } from "../version.ts";
-import { VERSION } from "../version.ts";
+export { VERSION } from "../metadata.ts";
+import { VERSION } from "../metadata.ts";
 /** CLI help, kept beside the actual option parser. */
 export const HELP = `dv ${VERSION} — commands, composed.
 
@@ -18,7 +18,6 @@ export const HELP = `dv ${VERSION} — commands, composed.
   dv batch --specs '[{"command":["deno","check","mod.ts"]}]' [options]
   dv matrix --rules '[{"packages":"apps/*","pattern":"apps/*/mod.ts","command":["deno","check","{file}"]}]' [options]
   dv rm --paths '["build","coverage"]' [options]
-  dv rm [--glob | --regex] [--root path] [--dry-run] <paths...>
   dv list [--justfile path] [--json]
   dv menu [--justfile path] [--complete recipe patterns...]
   dv banner <text...>
@@ -73,7 +72,7 @@ Just is needed only by list/menu. Import createPipeline for TypeScript wiring.
 
 /** Run the CLI and return its exit status without terminating an importing process. */
 export async function main(
-  args: readonly string[] = runtime.args,
+  args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
   let json = false;
   try {
@@ -126,47 +125,25 @@ export async function main(
       if (json) write(JSON.stringify(summary) + "\n", "stdout");
       return summary.code;
     }
-    if (
-      command === "rm" &&
-      rest.some((a) => a === "--paths" || a.startsWith("--paths="))
-    ) {
+    if (command === "rm") {
       const parsed = parseArgs(rest);
       json = parsed.json;
-      const result = await rm(parsed.paths ?? [], {
+      if (parsed.help) {
+        write(HELP, "stdout");
+        return 0;
+      }
+      if (!parsed.paths) {
+        throw new Error(
+          "rm requires --paths JSON; use --mode glob|regex for patterns",
+        );
+      }
+      const result = await rm(parsed.paths, {
         root: parsed.options.root,
         dryRun: parsed.options.dryRun,
         quiet: parsed.options.quiet,
         mode: parsed.options.mode ?? "path",
         exclude: parsed.options.exclude,
       });
-      if (json) write(JSON.stringify(result) + "\n", "stdout");
-      return 0;
-    }
-    if (command === "rm") {
-      const options: RemoveOptions = {}, paths: string[] = [];
-      let literal = false;
-      for (let i = 0; i < rest.length; i++) {
-        const arg = rest[i]!;
-        if (arg === "--" && !literal) {
-          literal = true;
-          continue;
-        }
-        if (!literal && (arg === "--glob" || arg === "--regex")) {
-          if (options.mode) throw new Error("Choose one removal matching mode");
-          options.mode = arg === "--glob" ? "glob" : "regex";
-        } else if (!literal && arg === "--root") {
-          options.root = rest[++i];
-          if (!options.root) throw new Error("--root requires a path");
-        } else if (!literal && arg === "--dry-run") options.dryRun = true;
-        else if (!literal && arg === "--quiet") options.quiet = true;
-        else if (!literal && arg === "--json") {
-          json = true;
-          options.quiet = true;
-        } else if (!literal && arg.startsWith("-")) {
-          throw new Error(`Unknown rm option: ${arg}`);
-        } else paths.push(arg);
-      }
-      const result = await rm(paths, options);
       if (json) write(JSON.stringify(result) + "\n", "stdout");
       return 0;
     }
@@ -194,7 +171,7 @@ export async function main(
           complete[name] = [...complete[name] ?? [], ...patterns];
         } else throw new Error(`Unknown ${command} option: ${arg}`);
       }
-      const { listJust, menuJust, readJust } = await import("../just.ts");
+      const { listJust, menuJust, readJust } = await import("../just/mod.ts");
       if (command === "list") {
         write(
           json
@@ -227,5 +204,3 @@ export async function main(
     return 2;
   }
 }
-
-if (runtime.isMain(import.meta)) runtime.exit(await main());

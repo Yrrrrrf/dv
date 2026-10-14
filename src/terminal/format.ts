@@ -1,25 +1,9 @@
-import { runtime } from "./runtime/deno.ts";
-import type { PlannedCommand } from "./types.ts";
+import process from "node:process";
+import type { PlannedCommand } from "../execution/types.ts";
 import { color } from "./style.ts";
 export { color } from "./style.ts";
 
-const encoder = new TextEncoder();
-/** Write a complete string to the selected output stream, including partial writes. */
-export function write(
-  text: string,
-  stream: "stdout" | "stderr" = "stderr",
-): void {
-  const bytes = encoder.encode(text);
-  const writer = stream === "stdout" ? runtime.stdout : runtime.stderr;
-  let offset = 0;
-  while (offset < bytes.length) {
-    offset += writer.writeSync(bytes.subarray(offset));
-  }
-}
-/** Whether interactive input and terminal reporting are both available. */
-export function isInteractive(): boolean {
-  return runtime.stdin.isTerminal() && runtime.stderr.isTerminal();
-}
+import { write } from "./io.ts";
 /** Print a standalone heading; execution already reports its own command headings. */
 export function banner(title: string): void {
   write(color(`◆ ${title}`, 35) + "\n");
@@ -40,7 +24,7 @@ export function quoteArgument(
 /** Render the resolved cwd, environment overrides, executable and arguments as one command. */
 export function formatCommand(
   plan: PlannedCommand,
-  shell: "sh" | "nu" | "powershell" = runtime.os === "windows"
+  shell: "sh" | "nu" | "powershell" = process.platform === "win32"
     ? "powershell"
     : "sh",
 ): string {
@@ -74,7 +58,3 @@ export function formatCommand(
     env.length ? `env ${env.map(([k, v]) => q(`${k}=${v}`)).join(" ")} ` : ""
   }${argv})`;
 }
-export { createReporter, isRawExecution } from "./reporting.ts";
-
-export { choose, readInput } from "./prompts.ts";
-export type { Choice, InputOptions, PromptOptions } from "./prompts.ts";

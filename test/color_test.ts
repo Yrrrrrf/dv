@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import process from "node:process";
 import { createReporter, exec, formatRecipes } from "../src/mod.ts";
 import {
   childEnvironment,
@@ -5,12 +7,10 @@ import {
   color,
   displayWidth,
   sanitize,
-} from "../src/style.ts";
+} from "../src/terminal/style.ts";
 import { assert, equal } from "./assert.ts";
 
 function colorEnvironment(run: () => void): void {
-  const noColor = Object.getOwnPropertyDescriptor(Deno, "noColor")!;
-  Object.defineProperty(Deno, "noColor", { configurable: true, value: false });
   const values = new Map(
     ["NO_COLOR", "FORCE_COLOR", "TERM"].map((key) => [key, Deno.env.get(key)]),
   );
@@ -20,7 +20,6 @@ function colorEnvironment(run: () => void): void {
     Deno.env.set("TERM", "xterm");
     run();
   } finally {
-    Object.defineProperty(Deno, "noColor", noColor);
     for (const [key, value] of values) {
       if (value === undefined) Deno.env.delete(key);
       else Deno.env.set(key, value);
@@ -38,10 +37,10 @@ Deno.test("sanitized terminal logs retain SGR and discard cursor/OSC controls", 
 });
 
 Deno.test("listing colors use stdout independently and descriptions are italic", () => {
-  const out = Deno.stdout.isTerminal, err = Deno.stderr.isTerminal;
+  const out = process.stdout.isTTY, err = process.stderr.isTTY;
   try {
-    Deno.stdout.isTerminal = () => true;
-    Deno.stderr.isTerminal = () => false;
+    process.stdout.isTTY = true;
+    process.stderr.isTTY = false;
     colorEnvironment(() => {
       Deno.env.delete("FORCE_COLOR");
       const text = formatRecipes([{
@@ -57,18 +56,18 @@ Deno.test("listing colors use stdout independently and descriptions are italic",
       equal(color("stdout", 31, "stdout"), "stdout");
     });
   } finally {
-    Deno.stdout.isTerminal = out;
-    Deno.stderr.isTerminal = err;
+    process.stdout.isTTY = out;
+    process.stderr.isTTY = err;
   }
 });
 
 Deno.test("reporter preserves emitted color but never child screen-clearing controls", () => {
-  const saved = Deno.stderr.writeSync;
+  const saved = fs.writeSync;
   let output = "";
-  Deno.stderr.writeSync = (bytes) => {
+  fs.writeSync = ((_fd: number, bytes: Uint8Array) => {
     output += new TextDecoder().decode(bytes);
     return bytes.length;
-  };
+  }) as typeof fs.writeSync;
   try {
     colorEnvironment(() => {
       const report = createReporter({ report: "stream", verbose: true });
@@ -91,7 +90,7 @@ Deno.test("reporter preserves emitted color but never child screen-clearing cont
     assert(output.includes("\x1b[31merror"));
     assert(!output.includes("\x1b[2J"));
   } finally {
-    Deno.stderr.writeSync = saved;
+    fs.writeSync = saved;
   }
 });
 

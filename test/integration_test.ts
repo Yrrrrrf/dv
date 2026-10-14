@@ -115,7 +115,7 @@ Deno.test({
         "deno",
         "run",
         "-A",
-        "../src/mod.ts",
+        "../src/cli/bin.ts",
         "list",
         "--justfile",
         "justfile",

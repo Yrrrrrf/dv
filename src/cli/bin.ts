@@ -1,5 +1,5 @@
-/** Executable-only entrypoint; library entrypoints retain their harmless imports. */
+/** Executable entrypoint; importing the library never starts the CLI. */
+import process from "node:process";
 import { main } from "./mod.ts";
-import { runtime } from "../runtime/deno.ts";
 
-runtime.exit(await main());
+process.exitCode = await main();
